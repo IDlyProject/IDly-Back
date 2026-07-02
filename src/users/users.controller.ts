@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Patch, Req, UseGuards } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiExcludeEndpoint, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { UsersService } from './users.service';
 import { JwtGuard } from '../auth/jwt.guard';
 import { UpdateProfileDto } from './dto/update-profile.dto';
@@ -46,6 +46,7 @@ OAuth 콜백 직후 이름을 입력받아 저장합니다.
   }
 
   @Get('me/accounts')
+  @ApiExcludeEndpoint()
   @ApiOperation({
     summary: '[마이] 연결된 Gmail 계정 목록',
     description: `
