@@ -45,6 +45,15 @@ export class AuthService {
     });
   }
 
+  /** JWT 디코딩 (검증 없이) — 만료된 토큰도 payload 추출 가능 */
+  decodeToken(token: string) {
+    try {
+      return this.jwtService.decode(token) as { sub: string; email: string } | null;
+    } catch {
+      return null;
+    }
+  }
+
   /** OAuth 콜백 처리 — 로그인 & 추가 계정 모두 이 메서드로 */
   async handleCallback(code: string, state?: string) {
     const { tokens } = await this.oauth2Client.getToken(code);
