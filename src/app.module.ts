@@ -3,14 +3,15 @@ import { ConfigModule } from '@nestjs/config';
 import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
+import { GmailModule } from './gmail/gmail.module';
 
-// 화면 01: Google OAuth 로그인
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     PrismaModule,
     AuthModule,
     UsersModule,
+    GmailModule,
   ],
 })
 export class AppModule {}
