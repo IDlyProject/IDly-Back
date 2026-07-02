@@ -13,7 +13,6 @@ export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
   @Patch('me')
-  @ApiTags('onboarding')
   @ApiOperation({
     summary: '[화면 03] 이름 입력 — 프로필 저장',
     description: `
