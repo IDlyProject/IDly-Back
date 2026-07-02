@@ -5,6 +5,7 @@ import { JwtGuard } from '../auth/jwt.guard';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { GmailAccountDto, UserDto } from '../common/dto/response.dto';
 
+@ApiTags('users')
 @ApiBearerAuth('access-token')
 @Controller('users')
 @UseGuards(JwtGuard)
@@ -30,7 +31,6 @@ OAuth 콜백 직후 이름을 입력받아 저장합니다.
   }
 
   @Get('me')
-  @ApiTags('users')
   @ApiOperation({
     summary: '[마이] 내 프로필 조회',
     description: `
@@ -47,7 +47,6 @@ OAuth 콜백 직후 이름을 입력받아 저장합니다.
   }
 
   @Get('me/accounts')
-  @ApiTags('users')
   @ApiOperation({
     summary: '[마이] 연결된 Gmail 계정 목록',
     description: `
