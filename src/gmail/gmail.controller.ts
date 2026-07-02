@@ -1,5 +1,5 @@
 import { Controller, Param, Post, Req, UseGuards } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiExcludeEndpoint, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { JwtGuard } from '../auth/jwt.guard';
 import { GmailService } from './gmail.service';
 
@@ -11,6 +11,7 @@ export class GmailController {
   constructor(private readonly gmailService: GmailService) {}
 
   @Post('accounts/:gmailAccountId/sync')
+  @ApiExcludeEndpoint()
   @ApiOperation({
     summary: '[화면 06] Gmail .mbox 동기화',
     description: `
