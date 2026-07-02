@@ -1,5 +1,5 @@
 import { Controller, Get, Query, Req, Res, UnauthorizedException } from '@nestjs/common';
-import { ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
+import { ApiExcludeEndpoint, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import type { Response } from 'express';
 import { AuthService } from './auth.service';
 import { ConfigService } from '@nestjs/config';
@@ -43,21 +43,7 @@ export class AuthController {
   }
 
   @Get('google/callback')
-  @ApiOperation({
-    summary: '[화면 04] 대표 계정 등록 완료 — OAuth 콜백 처리',
-    description: `
-**화면 03 → 04 처리 (추가 계정 연결도 이 엔드포인트)**
-
-Google이 \`code\`를 전달하면:
-1. \`code\` → \`access_token\` + \`refresh_token\` 교환
-2. \`userinfo\`로 이메일·이름 조회
-3. DB 저장: 신규면 User + GmailAccount 생성, 기존이면 refresh_token 갱신
-4. \`state\`에 \`addToUserId\`가 있으면 기존 유저에 계정 추가
-5. JWT 발급 후 프론트로 리다이렉트 (\`?token=<jwt>\`)
-    `.trim(),
-  })
-  @ApiQuery({ name: 'code', description: 'Google OAuth authorization code' })
-  @ApiQuery({ name: 'state', required: false, description: '추가 계정 연결 시 base64 encoded {addToUserId}' })
+  @ApiExcludeEndpoint()
   async googleCallback(
     @Query('code') code: string,
     @Query('state') state: string,
