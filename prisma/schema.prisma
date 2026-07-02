@@ -1,0 +1,80 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id        String   @id @default(uuid())
+  name      String?
+  phone     String?
+  ageGroup  String?
+  createdAt DateTime @default(now())
+
+  gmailAccounts GmailAccount[]
+  analysisRuns  AnalysisRun[]
+}
+
+model GmailAccount {
+  id           String    @id @default(uuid())
+  userId       String
+  email        String    @unique
+  refreshToken String
+  isPrimary    Boolean   @default(false)
+  lastSyncedAt DateTime?
+  createdAt    DateTime  @default(now())
+
+  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  serviceAccounts ServiceAccount[]
+}
+
+model ServiceAccount {
+  id             String    @id @default(uuid())
+  gmailAccountId String
+  serviceName    String
+  riskStatus     String    @default("safe") // safe | warning | danger
+  lastAnalyzedAt DateTime?
+  createdAt      DateTime  @default(now())
+
+  gmailAccount GmailAccount @relation(fields: [gmailAccountId], references: [id], onDelete: Cascade)
+  riskEvents   RiskEvent[]
+
+  @@unique([gmailAccountId, serviceName])
+}
+
+model RiskEvent {
+  id               String    @id @default(uuid())
+  serviceAccountId String
+  riskType         String    // new_device_login | password_reset | auth_code | account_recovery | permission_grant | security_notice
+  severity         String    @default("medium") // low | medium | high
+  status           String    @default("pending") // pending | resolved | skipped
+  evidenceEmails   Json      @default("[]")
+  createdAt        DateTime  @default(now())
+  resolvedAt       DateTime?
+
+  serviceAccount ServiceAccount @relation(fields: [serviceAccountId], references: [id], onDelete: Cascade)
+  actionItems    ActionItem[]
+}
+
+model ActionItem {
+  id          String   @id @default(uuid())
+  riskEventId String
+  label       String
+  isRequired  Boolean  @default(false)
+  status      String   @default("pending") // pending | done | skipped
+  createdAt   DateTime @default(now())
+
+  riskEvent RiskEvent @relation(fields: [riskEventId], references: [id], onDelete: Cascade)
+}
+
+model AnalysisRun {
+  id          String    @id @default(uuid())
+  userId      String
+  status      String    @default("queued") // queued | scanning | completed | failed
+  startedAt   DateTime  @default(now())
+  completedAt DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
