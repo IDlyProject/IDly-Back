@@ -1,11 +1,12 @@
 import { Controller, HttpCode, Post } from '@nestjs/common';
-import { ApiBody, ApiConsumes, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiBody, ApiConsumes, ApiExcludeEndpoint, ApiOperation, ApiTags } from '@nestjs/swagger';
 
 @ApiTags('ai')
 @Controller('ai')
 export class AiController {
   @Post('analyze')
   @HttpCode(200)
+  @ApiExcludeEndpoint()
   @ApiOperation({
     summary: '[AI 서버 계약] 백엔드가 AI 서버로 보내는 요청 명세',
     description: `
