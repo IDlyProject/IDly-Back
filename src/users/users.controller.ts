@@ -5,14 +5,32 @@ import { JwtGuard } from '../auth/jwt.guard';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { GmailAccountDto, UserDto } from '../common/dto/response.dto';
 
-@ApiTags('users')
 @ApiBearerAuth('access-token')
 @Controller('users')
 @UseGuards(JwtGuard)
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
+  @Patch('me')
+  @ApiTags('onboarding')
+  @ApiOperation({
+    summary: '[화면 03] 이름 입력 — 프로필 저장',
+    description: `
+**화면 03 · 대표 계정 확인 + 이름 입력**
+
+OAuth 콜백 직후 이름을 입력받아 저장합니다.
+\`name\` 만 보내도 되고, 나중에 마이 화면에서 \`phone\`, \`ageGroup\` 추가 수정도 이 API 사용합니다.
+
+변경할 필드만 보내면 됩니다 (partial update).
+    `.trim(),
+  })
+  @ApiResponse({ status: 200, type: UserDto, description: '수정된 유저 프로필' })
+  async updateProfile(@Req() req, @Body() body: UpdateProfileDto) {
+    return this.usersService.updateProfile(req.user.sub, body);
+  }
+
   @Get('me')
+  @ApiTags('users')
   @ApiOperation({
     summary: '[마이] 내 프로필 조회',
     description: `
@@ -29,6 +47,7 @@ export class UsersController {
   }
 
   @Get('me/accounts')
+  @ApiTags('users')
   @ApiOperation({
     summary: '[마이] 연결된 Gmail 계정 목록',
     description: `
@@ -44,15 +63,5 @@ export class UsersController {
   @ApiResponse({ status: 200, type: [GmailAccountDto], description: 'Gmail 계정 목록 (serviceAccounts 포함)' })
   async getAccounts(@Req() req) {
     return this.usersService.getConnectedAccounts(req.user.sub);
-  }
-
-  @Patch('me')
-  @ApiOperation({
-    summary: '[마이] 프로필 수정',
-    description: '이름, 전화번호, 연령대를 수정합니다. 변경할 필드만 보내면 됩니다.',
-  })
-  @ApiResponse({ status: 200, type: UserDto, description: '수정된 유저 프로필' })
-  async updateProfile(@Req() req, @Body() body: UpdateProfileDto) {
-    return this.usersService.updateProfile(req.user.sub, body);
   }
 }

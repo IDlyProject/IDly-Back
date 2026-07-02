@@ -20,7 +20,8 @@ async function bootstrap() {
       { type: 'http', scheme: 'bearer', bearerFormat: 'JWT', description: '로그인 후 발급된 JWT를 입력하세요 (Bearer 제외)' },
       'access-token',
     )
-    .addTag('onboarding', '화면 01 | Google OAuth 로그인 + Gmail 계정 연결')
+    .addTag('onboarding', '화면 01·03 | Google OAuth 로그인 + 이름 입력')
+    .addTag('users', '마이 화면 | 프로필 및 연결 계정 관리')
     .build();
 
   const document = SwaggerModule.createDocument(app, config);

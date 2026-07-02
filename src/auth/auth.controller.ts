@@ -1,9 +1,8 @@
-import { Controller, Get, Query, Req, Res, UnauthorizedException, UseGuards } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
+import { Controller, Get, Query, Req, Res, UnauthorizedException } from '@nestjs/common';
+import { ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import type { Response } from 'express';
 import { AuthService } from './auth.service';
 import { ConfigService } from '@nestjs/config';
-import { JwtGuard } from './jwt.guard';
 
 @ApiTags('onboarding')
 @Controller('auth')
@@ -15,18 +14,31 @@ export class AuthController {
 
   @Get('google')
   @ApiOperation({
-    summary: '[화면 01] 로그인 — Google OAuth 시작',
+    summary: '[화면 01·05] Google OAuth 시작 — 로그인 + 서브 계정 추가 통합',
     description: `
-**화면 01 · 로그인**
+**화면 01 · 로그인** / **화면 05 · 연결 계정 추가** — 엔드포인트 동일
 
-"Google로 계속하기" 버튼 클릭 시 호출.
-Gmail \`readonly\` 스코프 + 프로필 스코프를 한 번에 요청합니다 (\`access_type: offline\`, \`prompt: consent\`).
+- **JWT 없이 호출** → 신규 유저 생성 (대표 계정 \`isPrimary: true\`)
+- **JWT 헤더에 포함 후 호출** → 기존 유저에 서브 계정 추가 (\`isPrimary: false\`)
 
-→ Google 로그인 페이지로 리다이렉트됨 (브라우저에서 직접 접근)
+콜백은 동일한 \`/api/auth/google/callback\` 사용.
     `.trim(),
   })
-  googleAuth(@Res() res: Response) {
-    const url = this.authService.getAuthUrl();
+  googleAuth(@Req() req, @Res() res: Response) {
+    const authHeader = req.headers.authorization as string | undefined;
+    let userId: string | undefined;
+
+    if (authHeader?.startsWith('Bearer ')) {
+      try {
+        const payload = this.authService.decodeToken(authHeader.slice(7));
+        userId = payload?.sub;
+      } catch { /* 토큰 만료/오류 시 신규 로그인으로 처리 */ }
+    }
+
+    const url = userId
+      ? this.authService.getAddAccountUrl(userId)
+      : this.authService.getAuthUrl();
+
     res.redirect(url);
   }
 
@@ -59,20 +71,4 @@ Google이 \`code\`를 전달하면:
     res.redirect(`${frontendUrl}/auth/callback?token=${accessToken}`);
   }
 
-  @Get('google/add-account')
-  @UseGuards(JwtGuard)
-  @ApiBearerAuth('access-token')
-  @ApiOperation({
-    summary: '[화면 05] 연결 계정 추가 — 추가 Gmail OAuth 시작',
-    description: `
-**화면 05 · 연결 계정 추가**
-
-로그인 상태에서 "다른 Gmail 추가하기" 클릭 시 호출.
-\`state\`에 현재 userId를 담아 콜백에서 기존 유저에 계정을 추가합니다.
-    `.trim(),
-  })
-  addAccount(@Req() req, @Res() res: Response) {
-    const url = this.authService.getAddAccountUrl(req.user.sub);
-    res.redirect(url);
-  }
 }
