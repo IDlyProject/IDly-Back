@@ -22,6 +22,8 @@ export class AuthController {
 - **JWT 헤더에 포함 후 호출** → 기존 유저에 서브 계정 추가 (\`isPrimary: false\`)
 
 콜백은 동일한 \`/api/auth/google/callback\` 사용.
+
+**최종 결과:** Google 인증 완료 후 \`{FRONTEND_URL}/auth/callback?token={JWT}\` 로 리다이렉트됨 (로그인·계정 추가 모두 동일)
     `.trim(),
   })
   googleAuth(@Req() req, @Res() res: Response) {
