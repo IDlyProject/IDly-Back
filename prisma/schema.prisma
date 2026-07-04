@@ -78,3 +78,10 @@ model AnalysisRun {
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
+
+model BetaApplicant {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  phone     String
+  createdAt DateTime @default(now())
+}
