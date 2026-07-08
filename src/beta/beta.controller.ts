@@ -3,7 +3,7 @@ import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { BetaService } from './beta.service';
 import { CreateBetaApplicantDto } from './dto/create-beta-applicant.dto';
 
-@ApiTags('onboarding')
+@ApiTags('landing')
 @Controller('beta')
 export class BetaController {
   constructor(private readonly betaService: BetaService) {}
