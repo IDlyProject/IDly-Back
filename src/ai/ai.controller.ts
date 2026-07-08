@@ -1,7 +1,6 @@
 import { Controller, HttpCode, Post } from '@nestjs/common';
-import { ApiBody, ApiConsumes, ApiExcludeEndpoint, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiBody, ApiConsumes, ApiExcludeEndpoint, ApiOperation } from '@nestjs/swagger';
 
-@ApiTags('ai')
 @Controller('ai')
 export class AiController {
   @Post('analyze')
