@@ -4,6 +4,7 @@ import { AnalysisService } from './analysis.service';
 import { JwtGuard } from '../auth/jwt.guard';
 import { AnalysisRunDto, AnalysisRunStatusDto } from '../common/dto/response.dto';
 
+@ApiTags('Analysis')
 @Controller('analysis')
 export class AnalysisController {
   constructor(private readonly analysisService: AnalysisService) {}
@@ -11,7 +12,6 @@ export class AnalysisController {
   @Post('trigger')
   @UseGuards(JwtGuard)
   @ApiBearerAuth('access-token')
-  @ApiTags('onboarding')
   @ApiOperation({
     summary: '[화면 07] 분석 진행 — 분석 시작',
     description: `
@@ -35,7 +35,6 @@ export class AnalysisController {
   @Get('runs/:runId')
   @UseGuards(JwtGuard)
   @ApiBearerAuth('access-token')
-  @ApiTags('onboarding')
   @ApiOperation({
     summary: '[화면 07] 분석 진행 — 상태 폴링',
     description: `

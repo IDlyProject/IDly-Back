@@ -13,6 +13,8 @@ services:
         sync: false
       - key: FRONTEND_URL
         sync: false
+      - key: LANDING_URL
+        value: https://i-dly-landing.vercel.app
       - key: GOOGLE_CLIENT_ID
         sync: false
       - key: GOOGLE_CLIENT_SECRET
