@@ -26,11 +26,11 @@ export class GmailService {
    * Gmail 전체 메일을 .mbox 형식 Buffer로 반환
    * RFC 4155 준수: From <sender> <date>\n<raw message>\n\n
    */
-  async fetchAllEmailsAsMbox(gmailAccountId: string): Promise<{ mbox: Buffer; count: number }> {
+  async fetchAllEmailsAsMbox(gmailAccountId: string): Promise<{ mbox: Buffer; count: number; sizeBytes: number }> {
     const account = await this.prisma.gmailAccount.findUnique({
       where: { id: gmailAccountId },
     });
-    if (!account) return { mbox: Buffer.from(''), count: 0 };
+    if (!account) return { mbox: Buffer.from(''), count: 0, sizeBytes: 0 };
 
     const auth = this.getOAuth2Client(account.refreshToken);
     const gmail = google.gmail({ version: 'v1', auth });
@@ -92,6 +92,6 @@ export class GmailService {
     });
 
     const mbox = Buffer.from(mboxParts.join(''), 'binary');
-    return { mbox, count: mboxParts.length };
+    return { mbox, count: mboxParts.length, sizeBytes: mbox.byteLength };
   }
 }
