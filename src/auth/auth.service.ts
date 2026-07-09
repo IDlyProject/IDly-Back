@@ -91,7 +91,8 @@ export class AuthService {
 
     const payload = { sub: user.id, email: gmailAccount.email };
     const accessToken = this.jwtService.sign(payload);
+    const mode = addToUserId ? 'add' : 'login';
 
-    return { accessToken, user, gmailAccount };
+    return { accessToken, user, gmailAccount, mode };
   }
 }
