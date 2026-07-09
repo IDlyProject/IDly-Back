@@ -10,11 +10,14 @@ export class JwtGuard implements CanActivate {
     const req = context.switchToHttp().getRequest<Request>();
     const authHeader = req.headers.authorization;
 
-    if (!authHeader?.startsWith('Bearer ')) {
+    const token = authHeader?.startsWith('Bearer ')
+      ? authHeader.slice(7)
+      : (req as any).cookies?.['idly_token'];
+
+    if (!token) {
       throw new UnauthorizedException('토큰이 없습니다.');
     }
 
-    const token = authHeader.slice(7);
     try {
       req['user'] = this.jwtService.verify(token);
     } catch {
