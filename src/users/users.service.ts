@@ -77,7 +77,7 @@ export class UsersService {
       where: { userId },
       include: {
         serviceAccounts: {
-          select: { id: true, serviceName: true, riskStatus: true, lastAnalyzedAt: true },
+          select: { id: true, serviceName: true, riskLevel: true, status: true, lastAnalyzedAt: true },
         },
       },
       orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],

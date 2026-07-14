@@ -7,6 +7,7 @@ import { GmailModule } from './gmail/gmail.module';
 import { AnalysisModule } from './analysis/analysis.module';
 import { AiModule } from './ai/ai.module';
 import { BetaModule } from './beta/beta.module';
+import { HomeModule } from './home/home.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { BetaModule } from './beta/beta.module';
     AnalysisModule,
     AiModule,
     BetaModule,
+    HomeModule,
   ],
 })
 export class AppModule {}
