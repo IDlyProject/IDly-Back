@@ -5,111 +5,98 @@ import { PrismaService } from '../prisma/prisma.service';
 export class RisksService {
   constructor(private readonly prisma: PrismaService) {}
 
-  // 홈 화면(08): 이메일별 위험 서비스 목록
-  async getRisksByEmail(userId: string, gmailAccountId?: string) {
-    const where = gmailAccountId
-      ? { gmailAccountId }
-      : { gmailAccount: { userId } };
-
-    return this.prisma.serviceAccount.findMany({
-      where: {
-        ...where,
-        riskStatus: { in: ['warning', 'danger'] },
-      },
-      include: {
-        riskEvents: {
-          where: { status: 'pending' },
-          include: { actionItems: true },
-          orderBy: { createdAt: 'desc' },
-          take: 1,
-        },
-        gmailAccount: { select: { email: true } },
-      },
-      orderBy: { lastAnalyzedAt: 'desc' },
-    });
-  }
-
-  // 화면 09: 서비스 상세 (신호 + 대응 방법)
   async getServiceDetail(serviceAccountId: string, userId: string) {
     const sa = await this.prisma.serviceAccount.findFirst({
-      where: {
-        id: serviceAccountId,
-        gmailAccount: { userId },
-      },
+      where: { id: serviceAccountId, gmailAccount: { userId } },
       include: {
-        gmailAccount: { select: { email: true } },
-        riskEvents: {
-          where: { status: 'pending' },
-          include: { actionItems: true },
-          orderBy: { severity: 'desc' },
-        },
+        gmailAccount: { select: { email: true, label: true } },
+        riskEvidences: { orderBy: { receivedAt: 'desc' } },
+        actionItems: { orderBy: { order: 'asc' } },
       },
     });
 
     if (!sa) throw new NotFoundException('서비스를 찾을 수 없습니다.');
-    return sa;
+
+    return {
+      id: sa.id,
+      analysisId: sa.analysisRunId,
+      serviceName: sa.serviceName,
+      sourceMailAccount: {
+        id: sa.gmailAccountId,
+        email: sa.gmailAccount.email,
+        label: sa.gmailAccount.label ?? 'Gmail동',
+      },
+      status: sa.status,
+      riskLevel: sa.riskLevel,
+      primaryRiskType: sa.primaryRiskType,
+      headline: sa.headline,
+      summary: sa.summary,
+      interpretation: sa.interpretation,
+      evidences: sa.riskEvidences.map((e) => ({
+        id: e.id,
+        sender: e.sender,
+        receivedAt: e.receivedAt?.toISOString() ?? null,
+        subject: e.subject,
+        summary: e.summary,
+        evidenceType: e.riskType,
+      })),
+      actionGuide: {
+        title: '이렇게 대응하세요',
+        description: sa.interpretation ?? '',
+        steps: sa.actionItems.map((a) => ({
+          id: a.id,
+          title: a.title,
+          description: a.description,
+          required: a.isRequired,
+          externalUrl: a.externalUrl,
+          status: a.status,
+        })),
+      },
+    };
   }
 
-  // 화면 10: 조치 목록
-  async getActionItems(serviceAccountId: string, userId: string) {
+  async updateActionStatus(
+    serviceAccountId: string,
+    userId: string,
+    body: { status: 'resolved' | 'skipped' | 'pending'; completedStepIds?: string[] },
+  ) {
     const sa = await this.prisma.serviceAccount.findFirst({
       where: { id: serviceAccountId, gmailAccount: { userId } },
     });
     if (!sa) throw new NotFoundException('서비스를 찾을 수 없습니다.');
 
-    return this.prisma.actionItem.findMany({
-      where: {
-        riskEvent: { serviceAccountId },
-      },
-      include: {
-        riskEvent: { select: { riskType: true, severity: true } },
-      },
-      orderBy: [{ riskEvent: { severity: 'desc' } }, { isRequired: 'desc' }],
-    });
-  }
+    if (body.completedStepIds?.length) {
+      await this.prisma.actionItem.updateMany({
+        where: { serviceAccountId, id: { in: body.completedStepIds } },
+        data: { status: 'done' },
+      });
+    }
 
-  // 화면 10-3: 개별 조치 완료 처리
-  async markActionDone(actionItemId: string, userId: string) {
-    await this.verifyActionOwnership(actionItemId, userId);
-    return this.prisma.actionItem.update({
-      where: { id: actionItemId },
-      data: { status: 'done' },
-    });
-  }
-
-  // 화면 10: 조치 건너뛰기
-  async skipAction(actionItemId: string, userId: string) {
-    await this.verifyActionOwnership(actionItemId, userId);
-    return this.prisma.actionItem.update({
-      where: { id: actionItemId },
-      data: { status: 'skipped' },
-    });
-  }
-
-  // 전체 완료 후 riskEvent 상태 업데이트
-  async resolveRiskEvent(riskEventId: string, userId: string) {
-    const re = await this.prisma.riskEvent.findFirst({
-      where: {
-        id: riskEventId,
-        serviceAccount: { gmailAccount: { userId } },
+    const updated = await this.prisma.serviceAccount.update({
+      where: { id: serviceAccountId },
+      data: {
+        status: body.status === 'resolved' ? 'resolved' : body.status === 'skipped' ? 'safe' : sa.status,
+        resolvedAt: body.status === 'resolved' ? new Date() : null,
       },
     });
-    if (!re) throw new NotFoundException('리스크 이벤트를 찾을 수 없습니다.');
 
-    return this.prisma.riskEvent.update({
-      where: { id: riskEventId },
-      data: { status: 'resolved', resolvedAt: new Date() },
+    const allAccounts = await this.prisma.serviceAccount.findMany({
+      where: { gmailAccount: { userId } },
     });
-  }
+    const actionRequiredCount = allAccounts.filter(
+      (a) => a.status === 'action_required' || a.status === 'watch',
+    ).length;
+    const highCount = allAccounts.filter((a) => a.riskLevel === 'high').length;
+    const mediumCount = allAccounts.filter((a) => a.riskLevel === 'medium').length;
+    const lowCount = allAccounts.filter((a) => a.riskLevel === 'low').length;
+    const resolvedCount = allAccounts.filter((a) => a.status === 'resolved').length;
+    const securityScore = Math.max(0, Math.min(100, 100 - highCount * 12 - mediumCount * 6 - lowCount * 2 + resolvedCount * 3));
 
-  private async verifyActionOwnership(actionItemId: string, userId: string) {
-    const item = await this.prisma.actionItem.findFirst({
-      where: {
-        id: actionItemId,
-        riskEvent: { serviceAccount: { gmailAccount: { userId } } },
-      },
-    });
-    if (!item) throw new NotFoundException('조치 항목을 찾을 수 없습니다.');
-    return item;
+    return {
+      serviceAccountId: updated.id,
+      status: updated.status,
+      resolvedAt: updated.resolvedAt?.toISOString() ?? null,
+      homeDelta: { actionRequiredCount, securityScore },
+    };
   }
 }

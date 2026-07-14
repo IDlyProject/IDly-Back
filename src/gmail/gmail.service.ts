@@ -26,11 +26,11 @@ export class GmailService {
    * Gmail 전체 메일을 .mbox 형식 Buffer로 반환
    * RFC 4155 준수: From <sender> <date>\n<raw message>\n\n
    */
-  async fetchAllEmailsAsMbox(gmailAccountId: string): Promise<{ mbox: Buffer; count: number; sizeBytes: number }> {
+  async fetchAllEmailsAsMbox(gmailAccountId: string): Promise<{ mbox: Buffer; count: number; sizeBytes: number; lastEmailDate: Date | null }> {
     const account = await this.prisma.gmailAccount.findUnique({
       where: { id: gmailAccountId },
     });
-    if (!account) return { mbox: Buffer.from(''), count: 0, sizeBytes: 0 };
+    if (!account) return { mbox: Buffer.from(''), count: 0, sizeBytes: 0, lastEmailDate: null };
 
     const auth = this.getOAuth2Client(account.refreshToken);
     const gmail = google.gmail({ version: 'v1', auth });
@@ -55,6 +55,7 @@ export class GmailService {
 
     // 배치로 raw 포맷 fetch (동시 10개씩)
     const mboxParts: string[] = [];
+    let lastEmailDate: Date | null = null;
     const BATCH = 10;
 
     for (let i = 0; i < messageIds.length; i += BATCH) {
@@ -74,11 +75,10 @@ export class GmailService {
         const rawBytes = Buffer.from(msg.raw, 'base64url').toString('binary');
 
         // mbox From_ 라인 생성 (internalDate는 ms 단위)
-        const date = msg.internalDate
-          ? new Date(parseInt(msg.internalDate)).toUTCString()
-          : new Date().toUTCString();
+        const emailDate = msg.internalDate ? new Date(parseInt(msg.internalDate)) : new Date();
+        if (!lastEmailDate || emailDate > lastEmailDate) lastEmailDate = emailDate;
 
-        mboxParts.push(`From mboxrd@localhost ${date}\n${rawBytes}\n\n`);
+        mboxParts.push(`From mboxrd@localhost ${emailDate.toUTCString()}\n${rawBytes}\n\n`);
       }
 
       if (i % 100 === 0) {
@@ -92,6 +92,6 @@ export class GmailService {
     });
 
     const mbox = Buffer.from(mboxParts.join(''), 'binary');
-    return { mbox, count: mboxParts.length, sizeBytes: mbox.byteLength };
+    return { mbox, count: mboxParts.length, sizeBytes: mbox.byteLength, lastEmailDate };
   }
 }
