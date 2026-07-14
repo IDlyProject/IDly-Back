@@ -11,6 +11,7 @@ async function bootstrap() {
     process.env.FRONTEND_URL ?? 'http://localhost:5173',
     process.env.LANDING_URL ?? 'http://localhost:5174',
     'https://i-dly-landing.vercel.app',
+    'https://i-dly-front.vercel.app',
   ];
 
   app.enableCors({
