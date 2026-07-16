@@ -53,7 +53,9 @@ export class RisksController {
 **응답 포함 항목**
 - \`status\`, \`riskLevel\`, \`headline\`, \`summary\`, \`interpretation\`
 - \`evidences[]\`: 위험 판단 근거 이메일 목록
-- \`actionGuide\`: 조치 가이드 및 단계별 체크리스트`,
+- \`actionGuide\`: 조치 가이드 및 단계별 체크리스트
+
+\`evidenceHash\` 기준으로 동일 근거는 중복 저장하지 않으며, 메일 본문은 저장하지 않습니다.`,
   })
   @ApiParam({ name: 'serviceAccountId' })
   @ApiResponse({ status: 200, description: '서비스 계정 상세 정보' })
@@ -69,8 +71,8 @@ export class RisksController {
     description: `보안 조치 결과를 저장합니다.
 
 - \`resolved\`: 조치 완료 — 계정 상태가 \`resolved\`로 변경됨
-- \`skipped\`: 건너뜀 — 계정 상태 유지 (홈 카드는 그대로)
-- \`pending\`: 미완료 상태로 되돌림
+- \`skipped\`: 건너뜀 — 계정 상태가 \`skipped\`로 변경되고 홈 조치 대상에서 제외됨
+- \`pending\`: 미완료 상태로 되돌림 — 위험도에 따라 \`action_required\` 또는 \`watch\`로 복원
 - \`completedStepIds\`: 완료한 체크리스트 항목 ID 배열 (선택)`,
   })
   @ApiParam({ name: 'serviceAccountId' })

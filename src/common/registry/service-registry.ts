@@ -123,7 +123,7 @@ export const SERVICE_REGISTRY: ServiceRegistryItem[] = [
 
 const CLEARBIT_BASE = 'https://logo.clearbit.com';
 
-export function resolveService(accountName: string): {
+export function resolveService(...candidates: (string | null | undefined)[]): {
   serviceName: string;
   iconUrl: string | null;
   iconLabel: string;
@@ -131,9 +131,13 @@ export function resolveService(accountName: string): {
   passwordUrl: string | null;
   securityUrl: string | null;
 } {
-  const lower = accountName.toLowerCase();
+  const texts = candidates
+    .map((value) => value?.trim())
+    .filter((value): value is string => Boolean(value));
+  const lower = texts.join('\n').toLowerCase();
   const found = SERVICE_REGISTRY.find((item) =>
-    item.aliases.some((alias) => lower.includes(alias)),
+    lower.includes(item.domain.toLowerCase()) ||
+    item.aliases.some((alias) => lower.includes(alias.toLowerCase())),
   );
 
   if (found) {
@@ -147,9 +151,10 @@ export function resolveService(accountName: string): {
     };
   }
 
-  const label = accountName.trim().charAt(0).toUpperCase() || '?';
+  const fallbackName = texts[0] ?? 'Unknown';
+  const label = fallbackName.charAt(0).toUpperCase() || '?';
   return {
-    serviceName: accountName,
+    serviceName: fallbackName,
     iconUrl: null,
     iconLabel: label,
     officialUrl: null,

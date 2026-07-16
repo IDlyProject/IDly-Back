@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
 import FormData from 'form-data';
+import { createHash } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { GmailService } from '../gmail/gmail.service';
 import { resolveService } from '../common/registry/service-registry';
@@ -38,7 +39,20 @@ type RiskType =
   | 'security_recommendation';
 
 type RiskLevel = 'high' | 'medium' | 'low' | 'safe';
-type AccountStatus = 'action_required' | 'watch' | 'safe' | 'resolved';
+type AccountStatus =
+  | 'action_required'
+  | 'watch'
+  | 'safe'
+  | 'resolved'
+  | 'skipped'
+  | 'dormant';
+
+const FORCE_HIGH_RISK_TYPES = new Set<RiskType>([
+  'new_device_login',
+  'password_reset',
+  'verification_code',
+  'account_recovery',
+]);
 
 const STEP_MESSAGES: Record<string, string> = {
   waiting: '분석을 준비하고 있어요.',
@@ -227,11 +241,71 @@ export class AnalysisService {
   ) {
     for (const ai of result?.accounts ?? []) {
       const accountName = ai.account ?? 'Unknown';
-      const registry = resolveService(accountName);
-      const riskLevel = this.toRiskLevel(ai.security_level, ai.security_score);
-      const status = this.toStatus(riskLevel);
+      const mails = ai.problem_mails ?? [];
+      const registry = resolveService(
+        accountName,
+        ai.account_id,
+        ...mails.flatMap((mail) => [
+          mail.subject,
+          mail.matched_keywords,
+          this.senderCandidateFromSubject(mail.subject),
+        ]),
+      );
       const primaryRiskType =
-        riskLevel !== 'safe' ? this.inferRiskType(ai) : null;
+        mails.length > 0 || ai.security_level !== '양호'
+          ? this.inferRiskType(ai)
+          : null;
+      const riskLevel = this.toRiskLevel(
+        ai.security_level,
+        ai.security_score,
+        primaryRiskType,
+      );
+      const computedStatus = this.toStatus(riskLevel);
+
+      const evidenceInputs = mails
+        .filter((mail) => mail.subject || mail.date || mail.matched_keywords)
+        .map((mail) => {
+          const riskType = primaryRiskType ?? 'security_recommendation';
+          const evidenceHash = this.buildEvidenceHash(
+            registry.serviceName,
+            mail,
+          );
+          return {
+            evidenceHash,
+            riskType,
+            sender: registry.serviceName,
+            subject: mail.subject ?? null,
+            receivedAt: this.parseDate(mail.date),
+            summary: this.toEvidenceSummary(mail, ai, riskType),
+          };
+        });
+
+      const existing = await this.prisma.serviceAccount.findUnique({
+        where: {
+          gmailAccountId_serviceName: {
+            gmailAccountId,
+            serviceName: registry.serviceName,
+          },
+        },
+        include: {
+          riskEvidences: { select: { evidenceHash: true } },
+        },
+      });
+      const existingHashes = new Set(
+        existing?.riskEvidences
+          .map((e) => e.evidenceHash)
+          .filter((hash): hash is string => Boolean(hash)) ?? [],
+      );
+      const hasNewEvidence = evidenceInputs.some(
+        (e) => !existingHashes.has(e.evidenceHash),
+      );
+      const status = this.nextStatus(
+        existing?.status as AccountStatus | undefined,
+        computedStatus,
+        hasNewEvidence,
+      );
+      const shouldKeepUserDisposition =
+        !hasNewEvidence && (status === 'resolved' || status === 'skipped');
 
       const sa = await this.prisma.serviceAccount.upsert({
         where: {
@@ -243,6 +317,7 @@ export class AnalysisService {
         create: {
           gmailAccountId,
           analysisRunId: runId,
+          aiAccountId: ai.account_id ?? null,
           serviceName: registry.serviceName,
           displayName: registry.serviceName,
           iconUrl: registry.iconUrl,
@@ -253,10 +328,13 @@ export class AnalysisService {
           headline: riskLevel !== 'safe' ? this.toHeadline(riskLevel) : null,
           summary: ai.interpretation ?? null,
           interpretation: ai.interpretation ?? null,
+          skippedAt: status === 'skipped' ? existing?.skippedAt ?? null : null,
+          resolvedAt: status === 'resolved' ? existing?.resolvedAt ?? null : null,
           lastAnalyzedAt: new Date(),
         },
         update: {
           analysisRunId: runId,
+          aiAccountId: ai.account_id ?? null,
           iconUrl: registry.iconUrl,
           iconLabel: registry.iconLabel,
           riskLevel,
@@ -265,25 +343,40 @@ export class AnalysisService {
           headline: riskLevel !== 'safe' ? this.toHeadline(riskLevel) : null,
           summary: ai.interpretation ?? null,
           interpretation: ai.interpretation ?? null,
+          skippedAt:
+            status === 'skipped'
+              ? existing?.skippedAt ?? null
+              : shouldKeepUserDisposition
+                ? existing?.skippedAt ?? null
+                : null,
+          resolvedAt:
+            status === 'resolved'
+              ? existing?.resolvedAt ?? null
+              : shouldKeepUserDisposition
+                ? existing?.resolvedAt ?? null
+                : null,
           lastAnalyzedAt: new Date(),
         },
       });
 
-      await this.prisma.riskEvidence.deleteMany({
-        where: { serviceAccountId: sa.id },
-      });
-
-      for (const mail of ai.problem_mails ?? []) {
-        if (!mail.subject && !mail.date) continue;
-        await this.prisma.riskEvidence.create({
-          data: {
+      for (const evidence of evidenceInputs) {
+        await this.prisma.riskEvidence.upsert({
+          where: {
+            serviceAccountId_evidenceHash: {
+              serviceAccountId: sa.id,
+              evidenceHash: evidence.evidenceHash,
+            },
+          },
+          create: {
             serviceAccountId: sa.id,
-            riskType: primaryRiskType ?? 'security_recommendation',
-            sender: registry.serviceName,
-            subject: mail.subject ?? null,
-            receivedAt: mail.date ? new Date(mail.date) : null,
-            summary: ai.interpretation ?? null,
-            // body는 저장 금지
+            ...evidence,
+          },
+          update: {
+            riskType: evidence.riskType,
+            sender: evidence.sender,
+            subject: evidence.subject,
+            receivedAt: evidence.receivedAt,
+            summary: evidence.summary,
           },
         });
       }
@@ -291,7 +384,18 @@ export class AnalysisService {
       const existingActions = await this.prisma.actionItem.count({
         where: { serviceAccountId: sa.id },
       });
-      if (existingActions === 0 && riskLevel !== 'safe' && primaryRiskType) {
+      const shouldRefreshActions =
+        riskLevel !== 'safe' &&
+        primaryRiskType &&
+        (existingActions === 0 ||
+          (hasNewEvidence && existing?.primaryRiskType !== primaryRiskType));
+
+      if (shouldRefreshActions) {
+        if (existingActions > 0) {
+          await this.prisma.actionItem.deleteMany({
+            where: { serviceAccountId: sa.id },
+          });
+        }
         const template = this.getActionTemplate(primaryRiskType, registry);
         for (const [i, step] of template.entries()) {
           await this.prisma.actionItem.create({
@@ -318,9 +422,38 @@ export class AnalysisService {
 
   // ─── 분류 ──────────────────────────────────────────────────────────────────
 
-  private toRiskLevel(level?: string, score?: number): RiskLevel {
-    if (level === '위험') return score && score >= 7 ? 'high' : 'medium';
-    if (level === '주의') return 'medium';
+  private toRiskLevel(
+    level?: string,
+    score?: number,
+    riskType?: RiskType | null,
+  ): RiskLevel {
+    const normalizedScore =
+      typeof score === 'number' && Number.isFinite(score) ? score : null;
+    const hasForceHighRisk = riskType
+      ? FORCE_HIGH_RISK_TYPES.has(riskType)
+      : false;
+
+    if (level === '위험') {
+      if (hasForceHighRisk || (normalizedScore ?? 0) >= 7) return 'high';
+      return 'medium';
+    }
+
+    if (level === '주의') {
+      if (hasForceHighRisk || (normalizedScore ?? 0) >= 8) return 'high';
+      return 'medium';
+    }
+
+    if (level === '양호') {
+      if ((normalizedScore ?? 0) >= 6 && hasForceHighRisk) return 'medium';
+      if ((normalizedScore ?? 0) >= 4) return 'low';
+      return 'safe';
+    }
+
+    if (normalizedScore === null) return hasForceHighRisk ? 'medium' : 'safe';
+    if (hasForceHighRisk && normalizedScore >= 4) return 'high';
+    if (normalizedScore >= 7) return 'high';
+    if (normalizedScore >= 4) return 'medium';
+    if (normalizedScore > 0) return 'low';
     return 'safe';
   }
 
@@ -329,6 +462,21 @@ export class AnalysisService {
       return 'action_required';
     if (riskLevel === 'low') return 'watch';
     return 'safe';
+  }
+
+  private nextStatus(
+    existingStatus: AccountStatus | undefined,
+    computedStatus: AccountStatus,
+    hasNewEvidence: boolean,
+  ): AccountStatus {
+    if (
+      !hasNewEvidence &&
+      (existingStatus === 'resolved' || existingStatus === 'skipped')
+    ) {
+      return existingStatus;
+    }
+    if (existingStatus === 'dormant') return 'dormant';
+    return computedStatus;
   }
 
   private toHeadline(riskLevel: RiskLevel): string {
@@ -343,6 +491,7 @@ export class AnalysisService {
       ...(ai.problem_mails ?? []).flatMap((m) => [
         m.subject,
         m.matched_keywords,
+        m.body,
       ]),
     ]
       .filter(Boolean)
@@ -366,6 +515,78 @@ export class AnalysisService {
 
   private has(text: string, keywords: string[]): boolean {
     return keywords.some((kw) => text.includes(kw.toLowerCase()));
+  }
+
+  private buildEvidenceHash(serviceName: string, mail: AiProblemMail): string {
+    const normalizedKeywords = this.parseKeywords(mail.matched_keywords).join('|');
+    const hashInput = [
+      serviceName,
+      mail.subject,
+      mail.date,
+      normalizedKeywords,
+    ]
+      .map((value) => this.normalizeHashPart(value))
+      .join('::');
+
+    return createHash('sha256').update(hashInput).digest('hex');
+  }
+
+  private normalizeHashPart(value?: string | null): string {
+    return (value ?? '').trim().replace(/\s+/g, ' ').toLowerCase();
+  }
+
+  private parseKeywords(value?: string | null): string[] {
+    return (value ?? '')
+      .split(/[,|;/\n]+/)
+      .map((keyword) => keyword.trim())
+      .filter(Boolean)
+      .map((keyword) => keyword.toLowerCase())
+      .filter((keyword, index, array) => array.indexOf(keyword) === index);
+  }
+
+  private parseDate(value?: string): Date | null {
+    if (!value) return null;
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+
+  private senderCandidateFromSubject(subject?: string): string | null {
+    if (!subject) return null;
+    const domain = subject.match(/[a-z0-9.-]+\.[a-z]{2,}/i)?.[0];
+    return domain ?? null;
+  }
+
+  private toEvidenceSummary(
+    mail: AiProblemMail,
+    ai: AiAccountAnalysis,
+    riskType: RiskType,
+  ): string | null {
+    const keywords = this.parseKeywords(mail.matched_keywords).slice(0, 4);
+    const keywordText = keywords.length
+      ? `감지 키워드: ${keywords.join(', ')}`
+      : this.riskTypeLabel(riskType);
+
+    if (mail.subject) {
+      return `${keywordText} · "${mail.subject}"`;
+    }
+
+    if (ai.interpretation) {
+      return `${keywordText} · ${ai.interpretation}`;
+    }
+
+    return keywordText;
+  }
+
+  private riskTypeLabel(riskType: RiskType): string {
+    const map: Record<RiskType, string> = {
+      new_device_login: '새 기기 로그인 신호',
+      password_reset: '비밀번호 재설정 신호',
+      verification_code: '인증 코드 신호',
+      account_recovery: '계정 복구 신호',
+      permission_grant: '권한 허용 신호',
+      security_recommendation: '보안 알림 신호',
+    };
+    return map[riskType];
   }
 
   private getActionTemplate(
