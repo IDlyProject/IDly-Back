@@ -7,13 +7,15 @@ datasource db {
 }
 
 model User {
-  id                 String   @id @default(uuid())
-  name               String?
-  phone              String?
-  ageGroup           String?
-  notificationAgreed Boolean  @default(false)
-  marketingAgreed    Boolean  @default(false)
-  createdAt          DateTime @default(now())
+  id                    String    @id @default(uuid())
+  name                  String?
+  phone                 String?
+  ageGroup              String?
+  requiredTermsAgreed   Boolean   @default(false)
+  requiredTermsAgreedAt DateTime?
+  notificationAgreed    Boolean   @default(false)
+  marketingAgreed       Boolean   @default(false)
+  createdAt             DateTime  @default(now())
 
   gmailAccounts GmailAccount[]
   analysisRuns  AnalysisRun[]
@@ -59,9 +61,9 @@ model ServiceAccount {
   displayName     String?
   iconUrl         String?
   iconLabel       String?
-  riskLevel       String    @default("safe")          // high | medium | low | safe
-  status          String    @default("safe")           // action_required | watch | safe | resolved
-  primaryRiskType String?                              // new_device_login | password_reset | verification_code | account_recovery | permission_grant | security_recommendation
+  riskLevel       String    @default("safe") // high | medium | low | safe
+  status          String    @default("safe") // action_required | watch | safe | resolved
+  primaryRiskType String? // new_device_login | password_reset | verification_code | account_recovery | permission_grant | security_recommendation
   headline        String?
   summary         String?
   interpretation  String?
@@ -116,10 +118,10 @@ model BetaApplicant {
 
 // IDly-apps-in-toss 서비스에서 사용하는 테이블 — 직접 수정 금지
 model UserResponseLog {
-  userId       String   @map("user_id")
-  actionItemId String   @map("action_item_id")
+  userId       String    @map("user_id")
+  actionItemId String    @map("action_item_id")
   status       String
-  createdAt    DateTime @map("created_at")
+  createdAt    DateTime  @map("created_at")
   completedAt  DateTime? @map("completed_at")
 
   @@id([userId, actionItemId])
