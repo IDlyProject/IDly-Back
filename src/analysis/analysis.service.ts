@@ -1,5 +1,7 @@
 import {
   BadRequestException,
+  HttpException,
+  HttpStatus,
   Injectable,
   Logger,
   NotFoundException,
@@ -45,12 +47,7 @@ type RiskType =
 
 type RiskLevel = 'high' | 'medium' | 'low' | 'safe';
 type AccountStatus =
-  | 'action_required'
-  | 'watch'
-  | 'safe'
-  | 'resolved'
-  | 'skipped'
-  | 'dormant';
+  'action_required' | 'watch' | 'safe' | 'resolved' | 'skipped' | 'dormant';
 
 const FORCE_HIGH_RISK_TYPES = new Set<RiskType>([
   'new_device_login',
@@ -58,6 +55,7 @@ const FORCE_HIGH_RISK_TYPES = new Set<RiskType>([
   'verification_code',
   'account_recovery',
 ]);
+const ANALYSIS_COOLDOWN_MS = 60_000;
 
 const STEP_MESSAGES: Record<string, string> = {
   waiting: '분석을 준비하고 있어요.',
@@ -102,6 +100,20 @@ export class AnalysisService {
         targetMailAccounts: [],
         message: STEP_MESSAGES[running.currentStep] ?? STEP_MESSAGES['waiting'],
       };
+    }
+
+    const recentRun = await this.prisma.analysisRun.findFirst({
+      where: {
+        userId,
+        startedAt: { gte: new Date(Date.now() - ANALYSIS_COOLDOWN_MS) },
+      },
+      orderBy: { startedAt: 'desc' },
+    });
+    if (recentRun) {
+      throw new HttpException(
+        '분석 요청이 너무 잦습니다. 잠시 후 다시 시도해 주세요.',
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
     }
 
     const run = await this.prisma.analysisRun.create({
@@ -335,8 +347,10 @@ export class AnalysisService {
           headline: riskLevel !== 'safe' ? this.toHeadline(riskLevel) : null,
           summary: ai.interpretation ?? null,
           interpretation: ai.interpretation ?? null,
-          skippedAt: status === 'skipped' ? existing?.skippedAt ?? null : null,
-          resolvedAt: status === 'resolved' ? existing?.resolvedAt ?? null : null,
+          skippedAt:
+            status === 'skipped' ? (existing?.skippedAt ?? null) : null,
+          resolvedAt:
+            status === 'resolved' ? (existing?.resolvedAt ?? null) : null,
           lastAnalyzedAt: new Date(),
         },
         update: {
@@ -352,15 +366,15 @@ export class AnalysisService {
           interpretation: ai.interpretation ?? null,
           skippedAt:
             status === 'skipped'
-              ? existing?.skippedAt ?? null
+              ? (existing?.skippedAt ?? null)
               : shouldKeepUserDisposition
-                ? existing?.skippedAt ?? null
+                ? (existing?.skippedAt ?? null)
                 : null,
           resolvedAt:
             status === 'resolved'
-              ? existing?.resolvedAt ?? null
+              ? (existing?.resolvedAt ?? null)
               : shouldKeepUserDisposition
-                ? existing?.resolvedAt ?? null
+                ? (existing?.resolvedAt ?? null)
                 : null,
           lastAnalyzedAt: new Date(),
         },
@@ -525,13 +539,10 @@ export class AnalysisService {
   }
 
   private buildEvidenceHash(serviceName: string, mail: AiProblemMail): string {
-    const normalizedKeywords = this.parseKeywords(mail.matched_keywords).join('|');
-    const hashInput = [
-      serviceName,
-      mail.subject,
-      mail.date,
-      normalizedKeywords,
-    ]
+    const normalizedKeywords = this.parseKeywords(mail.matched_keywords).join(
+      '|',
+    );
+    const hashInput = [serviceName, mail.subject, mail.date, normalizedKeywords]
       .map((value) => this.normalizeHashPart(value))
       .join('::');
 
