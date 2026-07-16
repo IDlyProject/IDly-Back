@@ -80,7 +80,7 @@ export class HomeService {
       .filter((sa) => sa.status !== 'dormant' && sa.status !== 'skipped');
 
     const actionRequiredCount = allServiceAccounts.filter(
-      (sa) => sa.status === 'action_required' || sa.status === 'watch',
+      (sa) => sa.status === 'action_required',
     ).length;
 
     const highCount = allServiceAccounts.filter(
