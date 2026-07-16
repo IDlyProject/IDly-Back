@@ -66,8 +66,18 @@ export class HomeService {
     });
 
     const allServiceAccounts = gmailAccounts
-      .flatMap((ga) => ga.serviceAccounts)
-      .filter((sa) => sa.status !== 'dormant');
+      .flatMap((ga) =>
+        ga.serviceAccounts.map((sa) => ({
+          ...sa,
+          sourceMailAccount: {
+            id: ga.id,
+            email: ga.email,
+            label: ga.label ?? 'Gmail동',
+            role: ga.isPrimary ? 'primary' : 'connected',
+          },
+        })),
+      )
+      .filter((sa) => sa.status !== 'dormant' && sa.status !== 'skipped');
 
     const actionRequiredCount = allServiceAccounts.filter(
       (sa) => sa.status === 'action_required' || sa.status === 'watch',
@@ -131,7 +141,7 @@ export class HomeService {
         role: ga.isPrimary ? 'primary' : 'connected',
         status: ga.status,
         serviceAccountCount: ga.serviceAccounts.filter(
-          (sa) => sa.status !== 'dormant',
+          (sa) => sa.status !== 'dormant' && sa.status !== 'skipped',
         ).length,
       })),
       metrics: {
@@ -143,6 +153,7 @@ export class HomeService {
       serviceAccounts: allServiceAccounts.map((sa) => ({
         id: sa.id,
         sourceMailAccountId: sa.gmailAccountId,
+        sourceMailAccount: sa.sourceMailAccount,
         serviceName: sa.serviceName,
         displayName: sa.displayName ?? sa.serviceName,
         iconUrl: sa.iconUrl,

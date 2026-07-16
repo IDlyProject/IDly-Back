@@ -60,6 +60,21 @@ class HomeServiceAccountDto {
   @ApiProperty({ example: 'gmail-account-id-1' })
   sourceMailAccountId: string;
 
+  @ApiProperty({
+    example: {
+      id: 'gmail-account-id-1',
+      email: 'minji@gmail.com',
+      label: 'Gmail동',
+      role: 'primary',
+    },
+  })
+  sourceMailAccount: {
+    id: string;
+    email: string;
+    label: string;
+    role: 'primary' | 'connected';
+  };
+
   @ApiProperty({ example: 'disney' })
   serviceName: string;
 

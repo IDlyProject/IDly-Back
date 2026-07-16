@@ -27,14 +27,15 @@ export class HomeController {
 - AI 응답 필드 중 \`account\`는 서비스 식별/표시명, \`security_level\`·\`security_score\`는 \`riskLevel\`·\`status\`, \`interpretation\`은 카드 요약/해석, \`problem_mails[]\`는 위험 근거 메일로 가공됩니다.
 - 홈 API는 DB에 저장된 \`ServiceAccount\`들을 Gmail 계정별로 모아 카드 목록을 만듭니다.
 - 저장된 \`riskLevel\`과 \`status\`를 기반으로 조치 필요 개수, 보안 점수, 최우선 위험 요약을 계산합니다.
-- \`status=dormant\`인 서비스 계정은 홈 카드와 보안 점수 계산에서 제외됩니다.
+- \`status=dormant\` 또는 \`status=skipped\`인 서비스 계정은 홈 카드와 보안 점수 계산에서 제외됩니다.
 
 **응답 포함 항목**
 - \`userName\`: 유저 이름
 - \`backgroundAnalysis\`: 현재 진행 중인 분석 상태 (\`idle\` / \`scanning\` / \`failed\`)
+- \`mailAccounts[]\`: Gmail 드롭다운 항목
 - \`metrics\`: 총 서비스 계정 수, 조치 필요 수, 보안 점수
 - \`riskSummary\`: 가장 긴급한 위험 요약 또는 안전 메시지
-- \`serviceAccounts[]\`: 홈 카드 목록 (휴면 계정 제외)
+- \`serviceAccounts[]\`: 홈 카드 목록. 각 카드에 \`sourceMailAccount\`와 서비스 로고용 \`iconUrl\`/\`iconLabel\` 포함
 - \`cardNews[]\`: 카드뉴스 목록`,
   })
   @ApiQuery({

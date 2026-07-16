@@ -57,17 +57,19 @@ model ServiceAccount {
   id              String    @id @default(uuid())
   gmailAccountId  String
   analysisRunId   String?
+  aiAccountId     String?
   serviceName     String
   displayName     String?
   iconUrl         String?
   iconLabel       String?
   riskLevel       String    @default("safe") // high | medium | low | safe
-  status          String    @default("safe") // action_required | watch | safe | resolved
+  status          String    @default("safe") // action_required | watch | safe | resolved | skipped | dormant
   primaryRiskType String? // new_device_login | password_reset | verification_code | account_recovery | permission_grant | security_recommendation
   headline        String?
   summary         String?
   interpretation  String?
   resolvedAt      DateTime?
+  skippedAt       DateTime?
   lastAnalyzedAt  DateTime?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
@@ -92,6 +94,8 @@ model RiskEvidence {
   createdAt        DateTime  @default(now())
 
   serviceAccount ServiceAccount @relation(fields: [serviceAccountId], references: [id], onDelete: Cascade)
+
+  @@unique([serviceAccountId, evidenceHash])
 }
 
 model ActionItem {
