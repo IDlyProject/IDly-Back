@@ -113,7 +113,7 @@ export class UsersService {
     return this.prisma.user.update({ where: { id: userId }, data: dto });
   }
 
-  async saveConsent(userId: string, dto: { notificationAgreed: boolean; marketingAgreed: boolean }) {
+  async saveConsent(userId: string, dto: { notificationAgreed?: boolean; marketingAgreed?: boolean }) {
     return this.prisma.user.update({
       where: { id: userId },
       data: dto,
