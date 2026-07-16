@@ -38,16 +38,33 @@ async function bootstrap() {
       { type: 'http', scheme: 'bearer', bearerFormat: 'JWT', description: '로그인 후 발급된 JWT를 입력하세요 (Bearer 제외)' },
       'access-token',
     )
-    .addTag('onboarding', '화면 01·03·07 | Google OAuth 로그인 + 이름 입력 + 분석 트리거')
-.addTag('users', '마이 화면 | 프로필 및 연결 계정 관리')
+    .addTag('1-1. 로그인', 'Google OAuth 로그인 시작 및 콜백 처리')
+    .addTag('1-2. 회원가입', '온보딩 — 대표 계정 설정 · 약관 동의 · 추가 계정 연동 · 분석 시작')
+    .addTag('2-1. 홈 화면', '홈 데이터 조회 · 분석 시작 및 상태 폴링')
+    .addTag('2-3. 계정 상세 · 보안 조치', '서비스 계정 상세 조회 · 조치 상태 저장')
+    .addTag('4-1. 마이 화면', '내 프로필 조회')
+    .addTag('4-2. 계정 관리', '연결된 Gmail 계정 목록 조회')
+    .addTag('랜딩 | 베타 신청', '랜딩 페이지 — 베타 신청자 등록')
     .build();
 
   const document = SwaggerModule.createDocument(app, config);
+
+  // CLI 플러그인이 class-level @ApiTags를 메서드에 중복 적용하는 경우 dedup
+  const allowedTags = new Set(['1-1. 로그인', '1-2. 회원가입', '2-1. 홈 화면', '2-3. 계정 상세 · 보안 조치', '4-1. 마이 화면', '4-2. 계정 관리', '랜딩 | 베타 신청']);
+  for (const pathItem of Object.values(document.paths ?? {})) {
+    for (const op of Object.values(pathItem as Record<string, any>)) {
+      if (op && Array.isArray(op.tags)) {
+        op.tags = [...new Set(op.tags as string[])].filter((t) => allowedTags.has(t));
+      }
+    }
+  }
+
   SwaggerModule.setup('docs', app, document, {
     swaggerOptions: {
-      tagsSorter: 'alpha',
-      operationsSorter: 'alpha',
       persistAuthorization: true,
+      docExpansion: 'list',
+      filter: true,
+      displayRequestDuration: true,
     },
   });
 

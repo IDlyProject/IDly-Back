@@ -64,9 +64,34 @@ export class UsersService {
   async findById(id: string) {
     return this.prisma.user.findUnique({
       where: { id },
-      include: {
+      select: {
+        id: true,
+        name: true,
+        phone: true,
+        ageGroup: true,
+        notificationAgreed: true,
+        marketingAgreed: true,
+        createdAt: true,
         gmailAccounts: {
-          include: { serviceAccounts: true },
+          select: {
+            id: true,
+            email: true,
+            isPrimary: true,
+            label: true,
+            status: true,
+            lastSyncedAt: true,
+            lastEmailReceivedAt: true,
+            createdAt: true,
+            serviceAccounts: {
+              select: {
+                id: true,
+                serviceName: true,
+                riskLevel: true,
+                status: true,
+                lastAnalyzedAt: true,
+              },
+            },
+          },
         },
       },
     });
@@ -86,5 +111,13 @@ export class UsersService {
 
   async updateProfile(userId: string, dto: { name?: string; phone?: string; ageGroup?: string }) {
     return this.prisma.user.update({ where: { id: userId }, data: dto });
+  }
+
+  async saveConsent(userId: string, dto: { notificationAgreed: boolean; marketingAgreed: boolean }) {
+    return this.prisma.user.update({
+      where: { id: userId },
+      data: dto,
+      select: { id: true, notificationAgreed: true, marketingAgreed: true },
+    });
   }
 }

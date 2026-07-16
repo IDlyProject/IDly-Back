@@ -1,10 +1,10 @@
 import { BadRequestException, Controller, Get, Query, Req, Res, UnauthorizedException } from '@nestjs/common';
-import { ApiExcludeEndpoint, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiExcludeEndpoint, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
 import { AuthService } from './auth.service';
 import { ConfigService } from '@nestjs/config';
 
-@ApiTags('onboarding')
+@ApiTags('1-1. 로그인')
 @Controller('auth')
 export class AuthController {
   constructor(
@@ -16,8 +16,9 @@ export class AuthController {
   private readonly COOKIE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7일
 
   @Get('google')
+  @ApiTags('1-2. 회원가입')
   @ApiOperation({
-    summary: '[화면 01·05] Google OAuth 시작 — 로그인 + 서브 계정 추가 통합',
+    summary: 'Google OAuth 시작 — 로그인 + 서브 계정 추가 통합',
     description: `
 **화면 01 · 로그인** / **화면 05 · 연결 계정 추가** — 엔드포인트 동일
 
@@ -31,6 +32,7 @@ export class AuthController {
 - \`{FRONTEND_URL}/auth/callback?mode={login|add}\` 로 리다이렉트
     `.trim(),
   })
+  @ApiResponse({ status: 302, description: 'Google OAuth 페이지로 리다이렉트' })
   googleAuth(@Req() req: Request, @Res() res: Response) {
     const cookieToken = (req as any).cookies?.[this.COOKIE_NAME];
     const authHeader = req.headers.authorization as string | undefined;

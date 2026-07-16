@@ -75,7 +75,7 @@ export class RisksService {
     const updated = await this.prisma.serviceAccount.update({
       where: { id: serviceAccountId },
       data: {
-        status: body.status === 'resolved' ? 'resolved' : body.status === 'skipped' ? 'safe' : sa.status,
+        status: body.status === 'resolved' ? 'resolved' : sa.status,
         resolvedAt: body.status === 'resolved' ? new Date() : null,
       },
     });
@@ -94,9 +94,23 @@ export class RisksService {
 
     return {
       serviceAccountId: updated.id,
-      status: updated.status,
+      status: body.status,
       resolvedAt: updated.resolvedAt?.toISOString() ?? null,
       homeDelta: { actionRequiredCount, securityScore },
     };
+  }
+
+  async setDormant(serviceAccountId: string, userId: string) {
+    const sa = await this.prisma.serviceAccount.findFirst({
+      where: { id: serviceAccountId, gmailAccount: { userId } },
+    });
+    if (!sa) throw new NotFoundException('서비스를 찾을 수 없습니다.');
+
+    await this.prisma.serviceAccount.update({
+      where: { id: serviceAccountId },
+      data: { status: 'dormant' },
+    });
+
+    return { serviceAccountId, status: 'dormant' };
   }
 }
