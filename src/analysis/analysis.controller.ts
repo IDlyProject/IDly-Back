@@ -104,7 +104,7 @@ export class AnalysisController {
     type: AnalysisStatusResponseDto,
     description: '분석 진행 상태',
   })
-  getStatus(@Param('analysisId') analysisId: string) {
-    return this.analysisService.getStatus(analysisId);
+  getStatus(@Req() req, @Param('analysisId') analysisId: string) {
+    return this.analysisService.getStatus(analysisId, req.user.sub);
   }
 }

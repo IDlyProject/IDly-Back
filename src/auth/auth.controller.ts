@@ -40,7 +40,7 @@ export class AuthController {
     let userId: string | undefined;
 
     if (rawToken) {
-      const payload = this.authService.decodeToken(rawToken);
+      const payload = this.authService.verifyToken(rawToken);
       if (!payload?.sub) {
         throw new BadRequestException('유효하지 않은 토큰입니다. 다시 로그인해 주세요.');
       }

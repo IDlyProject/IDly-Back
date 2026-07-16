@@ -1,4 +1,9 @@
-import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
@@ -126,10 +131,12 @@ export class AnalysisService {
     };
   }
 
-  async getStatus(analysisId: string) {
-    const run = await this.prisma.analysisRun.findUniqueOrThrow({
-      where: { id: analysisId },
+  async getStatus(analysisId: string, userId: string) {
+    const run = await this.prisma.analysisRun.findFirst({
+      where: { id: analysisId, userId },
     });
+    if (!run) throw new NotFoundException('분석을 찾을 수 없습니다.');
+
     return {
       analysisId: run.id,
       status: run.status,
