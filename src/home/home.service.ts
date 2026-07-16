@@ -12,6 +12,11 @@ export class HomeService {
   constructor(private readonly prisma: PrismaService) {}
 
   async getHome(userId: string, mailAccountId: string = 'all') {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { name: true },
+    });
+
     const gmailAccounts = await this.prisma.gmailAccount.findMany({
       where: {
         userId,
@@ -21,13 +26,15 @@ export class HomeService {
     });
 
     const latestRun = await this.prisma.analysisRun.findFirst({
-      where: { userId, status: { in: ['queued', 'scanning', 'completed'] } },
+      where: { userId },
       orderBy: { startedAt: 'desc' },
     });
 
     const backgroundAnalysis =
       latestRun?.status === 'queued' || latestRun?.status === 'scanning'
         ? { status: 'scanning' as const, analysisId: latestRun.id }
+        : latestRun?.status === 'failed'
+        ? { status: 'failed' as const, analysisId: latestRun.id }
         : { status: 'idle' as const, analysisId: null };
 
     const lastRun = await this.prisma.analysisRun.findFirst({
@@ -35,7 +42,7 @@ export class HomeService {
       orderBy: { completedAt: 'desc' },
     });
 
-    const allServiceAccounts = gmailAccounts.flatMap((ga) => ga.serviceAccounts);
+    const allServiceAccounts = gmailAccounts.flatMap((ga) => ga.serviceAccounts).filter((sa) => sa.status !== 'dormant');
 
     const actionRequiredCount = allServiceAccounts.filter(
       (sa) => sa.status === 'action_required' || sa.status === 'watch',
@@ -71,6 +78,7 @@ export class HomeService {
 
     return {
       analysisId: lastRun?.id ?? null,
+      userName: user?.name ?? null,
       selectedMailAccountId: mailAccountId,
       lastAnalyzedAt: lastRun?.completedAt?.toISOString() ?? null,
       backgroundAnalysis,
