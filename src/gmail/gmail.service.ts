@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { google } from 'googleapis';
 import { PrismaService } from '../prisma/prisma.service';
@@ -26,11 +26,26 @@ export class GmailService {
    * Gmail 전체 메일을 .mbox 형식 Buffer로 반환
    * RFC 4155 준수: From <sender> <date>\n<raw message>\n\n
    */
-  async fetchAllEmailsAsMbox(gmailAccountId: string): Promise<{ mbox: Buffer; count: number; sizeBytes: number; lastEmailDate: Date | null }> {
-    const account = await this.prisma.gmailAccount.findUnique({
-      where: { id: gmailAccountId },
-    });
-    if (!account) return { mbox: Buffer.from(''), count: 0, sizeBytes: 0, lastEmailDate: null };
+  async fetchAllEmailsAsMbox(
+    gmailAccountId: string,
+    userId?: string,
+  ): Promise<{
+    mbox: Buffer;
+    count: number;
+    sizeBytes: number;
+    lastEmailDate: Date | null;
+  }> {
+    const account = userId
+      ? await this.prisma.gmailAccount.findFirst({
+          where: { id: gmailAccountId, userId },
+        })
+      : await this.prisma.gmailAccount.findUnique({
+          where: { id: gmailAccountId },
+        });
+    if (!account) {
+      if (userId) throw new NotFoundException('Gmail 계정을 찾을 수 없습니다.');
+      return { mbox: Buffer.from(''), count: 0, sizeBytes: 0, lastEmailDate: null };
+    }
 
     const auth = this.getOAuth2Client(account.refreshToken);
     const gmail = google.gmail({ version: 'v1', auth });

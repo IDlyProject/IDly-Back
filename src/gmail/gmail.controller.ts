@@ -26,8 +26,11 @@ export class GmailController {
   })
   @ApiParam({ name: 'gmailAccountId', description: 'GET /api/users/me 응답의 gmailAccounts[].id' })
   @ApiResponse({ status: 201, schema: { example: { count: 1234, gmailAccountId: 'uuid', sizeBytes: 12345678 } } })
-  async syncAccount(@Param('gmailAccountId') gmailAccountId: string) {
-    const { count, sizeBytes } = await this.gmailService.fetchAllEmailsAsMbox(gmailAccountId);
+  async syncAccount(@Req() req, @Param('gmailAccountId') gmailAccountId: string) {
+    const { count, sizeBytes } = await this.gmailService.fetchAllEmailsAsMbox(
+      gmailAccountId,
+      req.user.sub,
+    );
     return { count, gmailAccountId, sizeBytes };
   }
 }
