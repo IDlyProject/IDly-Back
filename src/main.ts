@@ -16,23 +16,45 @@ async function bootstrap() {
 
   app.enableCors({
     origin: (origin, callback) => {
+      // Non-browser clients (curl, server-to-server) often omit Origin
       if (!origin || allowedOrigins.includes(origin)) {
         callback(null, true);
       } else {
-        callback(new Error(`CORS blocked: ${origin}`));
+        // Do not throw — Nest would turn Error into 500; deny origin instead
+        callback(null, false);
       }
     },
     credentials: true,
   });
 
   app.use(cookieParser());
-  app.useGlobalPipes(new ValidationPipe({ whitelist: true }));
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+    }),
+  );
 
   app.setGlobalPrefix('api');
 
   const config = new DocumentBuilder()
     .setTitle('IDly API')
-    .setDescription('IDly 백엔드 API 문서')
+    .setDescription(
+      [
+        'IDly 백엔드 API 문서',
+        '',
+        '## 주요 흐름',
+        '1. Google OAuth 로그인 (`GET /api/auth/google`)',
+        '2. 온보딩: 프로필 → 약관 동의 → (선택) 추가 Gmail',
+        '3. 분석 시작 (`POST /api/analysis/start`) → 상태 폴링',
+        '4. 홈 (`GET /api/home`) · 서비스 상세 · 조치 상태',
+        '',
+        '## 인증',
+        '- `Authorization: Bearer <JWT>` 또는 httpOnly 쿠키 `idly_token`',
+        '- 쿠키-only mutating 요청은 Origin/Referer 허용 목록 검사',
+      ].join('\n'),
+    )
     .setVersion('1.0')
     .addBearerAuth(
       {
@@ -93,5 +115,6 @@ async function bootstrap() {
   await app.listen(port);
   console.log(`IDly backend running on port ${port}`);
   console.log(`Swagger: http://localhost:${port}/docs`);
+  console.log(`Health:  http://localhost:${port}/api/health`);
 }
 bootstrap();

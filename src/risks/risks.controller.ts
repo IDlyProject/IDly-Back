@@ -2,7 +2,9 @@ import {
   Body,
   Controller,
   Get,
+  HttpCode,
   Param,
+  Patch,
   Post,
   Req,
   UseGuards,
@@ -64,11 +66,13 @@ export class RisksController {
     return this.risksService.getServiceDetail(id, req.user.sub);
   }
 
-  @Post(':serviceAccountId/action-status')
+  @Patch(':serviceAccountId/action-status')
+  @Post(':serviceAccountId/action-status') // 하위 호환
+  @HttpCode(200)
   @ApiTags('2-3. 계정 상세 · 보안 조치')
   @ApiOperation({
     summary: '조치 상태 저장 — resolved / skipped / pending',
-    description: `보안 조치 결과를 저장합니다.
+    description: `보안 조치 결과를 저장합니다. (\`PATCH\` 권장, \`POST\` 하위 호환)
 
 - \`resolved\`: 조치 완료 — 계정 상태가 \`resolved\`로 변경됨
 - \`skipped\`: 건너뜀 — 계정 상태가 \`skipped\`로 변경되고 홈 조치 대상에서 제외됨
@@ -78,7 +82,7 @@ export class RisksController {
   @ApiParam({ name: 'serviceAccountId' })
   @ApiBody({ type: UpdateActionStatusDto })
   @ApiResponse({
-    status: 201,
+    status: 200,
     description: '조치 상태 저장됨',
     schema: {
       example: {
@@ -98,18 +102,20 @@ export class RisksController {
     return this.risksService.updateActionStatus(id, req.user.sub, body);
   }
 
-  @Post(':serviceAccountId/dormant')
+  @Patch(':serviceAccountId/dormant')
+  @Post(':serviceAccountId/dormant') // 하위 호환
+  @HttpCode(200)
   @ApiTags('2-1. 홈 화면')
   @ApiOperation({
     summary: '계정 숨기기 — 홈에서 숨기고 휴면 계정으로 전환',
-    description: `서비스 계정을 휴면 상태(\`dormant\`)로 전환합니다.
+    description: `서비스 계정을 휴면 상태(\`dormant\`)로 전환합니다. (\`PATCH\` 권장, \`POST\` 하위 호환)
 
 휴면 계정은 홈 카드 목록에서 제외되며, 보안 점수 계산에서도 빠집니다.
 복원 기능은 현재 미구현(추후 지원 예정).`,
   })
   @ApiParam({ name: 'serviceAccountId' })
   @ApiResponse({
-    status: 201,
+    status: 200,
     description: '휴면 전환 완료',
     schema: { example: { serviceAccountId: 'sa-uuid', status: 'dormant' } },
   })

@@ -76,7 +76,7 @@ export class UsersController {
   }
 
   @Get('me')
-  @ApiTags('1-2. 회원가입')
+  @ApiTags('1-2. 회원가입', '4-1. 마이 화면')
   @ApiOperation({
     summary: '내 프로필 조회',
     description: `로그인한 유저의 프로필과 연결된 Gmail 계정 목록을 반환합니다.
@@ -97,7 +97,7 @@ export class UsersController {
   }
 
   @Get('me/accounts')
-  @ApiTags('1-2. 회원가입')
+  @ApiTags('1-2. 회원가입', '4-2. 계정 관리')
   @ApiOperation({
     summary: '연결된 Gmail 계정 목록',
     description: `연결된 Gmail 계정 목록을 반환합니다.

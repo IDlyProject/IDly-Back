@@ -51,6 +51,9 @@ model AnalysisRun {
 
   user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   serviceAccounts ServiceAccount[]
+
+  @@index([userId, status])
+  @@index([userId, startedAt])
 }
 
 model ServiceAccount {
@@ -80,6 +83,7 @@ model ServiceAccount {
   actionItems   ActionItem[]
 
   @@unique([gmailAccountId, serviceName])
+  @@index([gmailAccountId, status])
 }
 
 model RiskEvidence {

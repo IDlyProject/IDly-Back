@@ -28,5 +28,8 @@ jobs:
       - name: Type check
         run: npx tsc --noEmit
 
+      - name: Unit tests
+        run: npm test -- --passWithNoTests
+
       - name: Build
         run: npx nest build

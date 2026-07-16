@@ -1,5 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import {
+  computeSecurityScore,
+  countActionRequired,
+  isActiveForHomeMetrics,
+} from '../common/domain/metrics';
 
 const CARD_NEWS = [
   {
@@ -77,36 +82,10 @@ export class HomeService {
           },
         })),
       )
-      .filter((sa) => sa.status !== 'dormant' && sa.status !== 'skipped');
+      .filter((sa) => isActiveForHomeMetrics(sa.status));
 
-    const actionRequiredCount = allServiceAccounts.filter(
-      (sa) => sa.status === 'action_required',
-    ).length;
-
-    const highCount = allServiceAccounts.filter(
-      (sa) => sa.riskLevel === 'high',
-    ).length;
-    const mediumCount = allServiceAccounts.filter(
-      (sa) => sa.riskLevel === 'medium',
-    ).length;
-    const lowCount = allServiceAccounts.filter(
-      (sa) => sa.riskLevel === 'low',
-    ).length;
-    const resolvedCount = allServiceAccounts.filter(
-      (sa) => sa.status === 'resolved',
-    ).length;
-
-    const securityScore = Math.max(
-      0,
-      Math.min(
-        100,
-        100 -
-          highCount * 12 -
-          mediumCount * 6 -
-          lowCount * 2 +
-          resolvedCount * 3,
-      ),
-    );
+    const actionRequiredCount = countActionRequired(allServiceAccounts);
+    const securityScore = computeSecurityScore(allServiceAccounts);
 
     const topRisk = allServiceAccounts
       .filter((sa) => sa.status === 'action_required')
@@ -140,8 +119,8 @@ export class HomeService {
         label: ga.label ?? 'Gmail동',
         role: ga.isPrimary ? 'primary' : 'connected',
         status: ga.status,
-        serviceAccountCount: ga.serviceAccounts.filter(
-          (sa) => sa.status !== 'dormant' && sa.status !== 'skipped',
+        serviceAccountCount: ga.serviceAccounts.filter((sa) =>
+          isActiveForHomeMetrics(sa.status),
         ).length,
       })),
       metrics: {
