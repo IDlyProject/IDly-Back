@@ -5,6 +5,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  OnModuleInit,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { HttpService } from '@nestjs/axios';
@@ -14,6 +15,8 @@ import { createHash } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { GmailService } from '../gmail/gmail.service';
 import { resolveService } from '../common/registry/service-registry';
+import { ANALYSIS_ORPHAN_TTL_MS } from '../common/domain/status';
+import type { AccountStatus, RiskLevel } from '../common/domain/status';
 
 type AiSecurityLevel = '위험' | '주의' | '양호';
 
@@ -45,10 +48,6 @@ type RiskType =
   | 'permission_grant'
   | 'security_recommendation';
 
-type RiskLevel = 'high' | 'medium' | 'low' | 'safe';
-type AccountStatus =
-  'action_required' | 'watch' | 'safe' | 'resolved' | 'skipped' | 'dormant';
-
 const FORCE_HIGH_RISK_TYPES = new Set<RiskType>([
   'new_device_login',
   'password_reset',
@@ -67,7 +66,7 @@ const STEP_MESSAGES: Record<string, string> = {
 };
 
 @Injectable()
-export class AnalysisService {
+export class AnalysisService implements OnModuleInit {
   private readonly logger = new Logger(AnalysisService.name);
 
   constructor(
@@ -77,7 +76,34 @@ export class AnalysisService {
     private readonly config: ConfigService,
   ) {}
 
+  async onModuleInit() {
+    await this.recoverOrphanRuns();
+  }
+
+  /** Mark runs stuck in queued/scanning longer than TTL as failed (process crash recovery). */
+  async recoverOrphanRuns() {
+    const cutoff = new Date(Date.now() - ANALYSIS_ORPHAN_TTL_MS);
+    const result = await this.prisma.analysisRun.updateMany({
+      where: {
+        status: { in: ['queued', 'scanning'] },
+        startedAt: { lt: cutoff },
+      },
+      data: {
+        status: 'failed',
+        currentStep: 'failed',
+        displayMessage: STEP_MESSAGES['failed'],
+        failedReason: 'analysis_orphaned_timeout',
+        completedAt: new Date(),
+      },
+    });
+    if (result.count > 0) {
+      this.logger.warn(`Recovered ${result.count} orphan analysis run(s)`);
+    }
+  }
+
   async startAnalysis(userId: string, mailAccountIds?: string[]) {
+    await this.recoverOrphanRuns();
+
     const accounts = await this.prisma.gmailAccount.findMany({
       where: {
         userId,
@@ -87,7 +113,9 @@ export class AnalysisService {
     });
 
     if (!accounts.length) {
-      throw new BadRequestException('연결된 Gmail 계정이 없습니다.');
+      throw new BadRequestException(
+        '연결된 Gmail 계정이 없습니다. 재연결이 필요한 계정은 마이 화면에서 다시 연동해 주세요.',
+      );
     }
 
     const running = await this.prisma.analysisRun.findFirst({
@@ -127,9 +155,11 @@ export class AnalysisService {
       },
     });
 
-    setImmediate(() =>
-      this.runPipeline(run.id, userId, accounts).catch(() => {}),
-    );
+    setImmediate(() => {
+      this.runPipeline(run.id, userId, accounts).catch((e) => {
+        this.logger.error(`[runId=${run.id}] unhandled pipeline error: ${e}`);
+      });
+    });
 
     return {
       analysisId: run.id,
@@ -168,6 +198,12 @@ export class AnalysisService {
     userId: string,
     accounts: { id: string; email: string }[],
   ) {
+    let gmailAttempts = 0;
+    let gmailSuccesses = 0;
+    let aiAttempts = 0;
+    let aiSuccesses = 0;
+    const partialErrors: string[] = [];
+
     try {
       await this.updateStep(runId, 'checking_connected_mail', 10);
 
@@ -175,8 +211,22 @@ export class AnalysisService {
         await this.updateStep(runId, 'collecting_account_signals', 30);
         this.logger.log(`[${account.email}] mbox 수집 시작`);
 
-        const { mbox, count, sizeBytes, lastEmailDate } =
-          await this.gmailService.fetchAllEmailsAsMbox(account.id, userId);
+        gmailAttempts += 1;
+        let mbox: Buffer;
+        let count: number;
+        let sizeBytes: number;
+        let lastEmailDate: Date | null;
+
+        try {
+          ({ mbox, count, sizeBytes, lastEmailDate } =
+            await this.gmailService.fetchAllEmailsAsMbox(account.id, userId));
+          gmailSuccesses += 1;
+        } catch (e) {
+          const msg = this.safeErrorMessage(e);
+          this.logger.error(`[${account.email}] Gmail 수집 실패: ${msg}`);
+          partialErrors.push(`${account.email}: gmail_fetch_failed`);
+          continue;
+        }
 
         if (count === 0) {
           this.logger.warn(`[${account.email}] 메일 없음, 건너뜀`);
@@ -187,15 +237,34 @@ export class AnalysisService {
           `[${account.email}] ${count}개, ${sizeBytes} bytes → AI 전송`,
         );
 
+        aiAttempts += 1;
         let aiResult: AiAnalyzeResponse = { accounts: [] };
         try {
           aiResult = await this.uploadMboxToAI(mbox);
+          aiSuccesses += 1;
         } catch (e) {
-          this.logger.error(`[${account.email}] AI 분석 실패: ${e}`);
+          const msg = this.safeErrorMessage(e);
+          this.logger.error(`[${account.email}] AI 분석 실패: ${msg}`);
+          partialErrors.push(`${account.email}: ai_analyze_failed`);
+          continue;
         }
 
         await this.updateStep(runId, 'preparing_home', 70);
         await this.saveResults(account.id, runId, aiResult, lastEmailDate);
+      }
+
+      // Fail the run if every Gmail or AI attempt failed (no usable results)
+      if (gmailAttempts > 0 && gmailSuccesses === 0) {
+        await this.markFailed(
+          runId,
+          '모든 Gmail 계정 메일 수집에 실패했습니다.',
+        );
+        return;
+      }
+
+      if (aiAttempts > 0 && aiSuccesses === 0) {
+        await this.markFailed(runId, 'AI 분석 서버 호출에 모두 실패했습니다.');
+        return;
       }
 
       await this.prisma.analysisRun.update({
@@ -206,21 +275,43 @@ export class AnalysisService {
           currentStep: 'completed',
           displayMessage: STEP_MESSAGES['completed'],
           completedAt: new Date(),
+          // Surface partial failures without failing the whole run
+          failedReason:
+            partialErrors.length > 0
+              ? `partial_errors: ${partialErrors.slice(0, 5).join('; ')}`
+              : null,
         },
       });
     } catch (e) {
       this.logger.error(`[runId=${runId}] 파이프라인 실패: ${e}`);
-      await this.prisma.analysisRun.update({
-        where: { id: runId },
-        data: {
-          status: 'failed',
-          currentStep: 'failed',
-          displayMessage: STEP_MESSAGES['failed'],
-          failedReason: String(e),
-          completedAt: new Date(),
-        },
-      });
+      await this.markFailed(runId, this.safeErrorMessage(e));
     }
+  }
+
+  private safeErrorMessage(error: unknown): string {
+    if (error instanceof HttpException) {
+      const res = error.getResponse();
+      if (typeof res === 'string') return res.slice(0, 300);
+      if (typeof res === 'object' && res && 'message' in res) {
+        const msg = (res as { message: string | string[] }).message;
+        return (Array.isArray(msg) ? msg.join(', ') : msg).slice(0, 300);
+      }
+    }
+    if (error instanceof Error) return error.message.slice(0, 300);
+    return 'unknown_error';
+  }
+
+  private async markFailed(runId: string, reason: string) {
+    await this.prisma.analysisRun.update({
+      where: { id: runId },
+      data: {
+        status: 'failed',
+        currentStep: 'failed',
+        displayMessage: STEP_MESSAGES['failed'],
+        failedReason: reason.slice(0, 500),
+        completedAt: new Date(),
+      },
+    });
   }
 
   private async updateStep(runId: string, step: string, progress: number) {
@@ -249,7 +340,12 @@ export class AnalysisService {
         timeout: 300_000,
       }),
     );
-    return data;
+
+    // Loose shape check — reject clearly invalid AI payloads
+    if (data == null || typeof data !== 'object') {
+      throw new Error('AI response is not an object');
+    }
+    return data as AiAnalyzeResponse;
   }
 
   private async saveResults(

@@ -1,5 +1,10 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import {
+  computeSecurityScore,
+  countActionRequired,
+  isActiveForHomeMetrics,
+} from '../common/domain/metrics';
 
 @Injectable()
 export class RisksService {
@@ -58,7 +63,10 @@ export class RisksService {
   async updateActionStatus(
     serviceAccountId: string,
     userId: string,
-    body: { status: 'resolved' | 'skipped' | 'pending'; completedStepIds?: string[] },
+    body: {
+      status: 'resolved' | 'skipped' | 'pending';
+      completedStepIds?: string[];
+    },
   ) {
     const sa = await this.prisma.serviceAccount.findFirst({
       where: { id: serviceAccountId, gmailAccount: { userId } },
@@ -84,29 +92,18 @@ export class RisksService {
     const allAccounts = await this.prisma.serviceAccount.findMany({
       where: { gmailAccount: { userId } },
     });
-    const activeAccounts = allAccounts.filter(
-      (a) => a.status !== 'dormant' && a.status !== 'skipped',
-    );
-    const actionRequiredCount = activeAccounts.filter(
-      (a) => a.status === 'action_required',
-    ).length;
-    const highCount = activeAccounts.filter((a) => a.riskLevel === 'high').length;
-    const mediumCount = activeAccounts.filter((a) => a.riskLevel === 'medium').length;
-    const lowCount = activeAccounts.filter((a) => a.riskLevel === 'low').length;
-    const resolvedCount = activeAccounts.filter((a) => a.status === 'resolved').length;
-    const securityScore = Math.max(
-      0,
-      Math.min(
-        100,
-        100 - highCount * 12 - mediumCount * 6 - lowCount * 2 + resolvedCount * 3,
-      ),
+    const activeAccounts = allAccounts.filter((a) =>
+      isActiveForHomeMetrics(a.status),
     );
 
     return {
       serviceAccountId: updated.id,
       status: updated.status,
       resolvedAt: updated.resolvedAt?.toISOString() ?? null,
-      homeDelta: { actionRequiredCount, securityScore },
+      homeDelta: {
+        actionRequiredCount: countActionRequired(activeAccounts),
+        securityScore: computeSecurityScore(activeAccounts),
+      },
     };
   }
 

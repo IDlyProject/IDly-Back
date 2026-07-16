@@ -1,98 +1,88 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# IDly Back
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+Gmail 보안 신호 분석 서비스 **IDly**의 NestJS 백엔드입니다.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+## 아키텍처 개요
 
-## Description
+```
+Browser (Front)
+   │  JWT cookie / Bearer
+   ▼
+NestJS API  (/api/*)
+   ├─ Auth      Google OAuth → User + GmailAccount
+   ├─ Users     프로필 · 약관 동의 · 연결 계정
+   ├─ Analysis  Gmail mbox 수집 → AI /analyze → ServiceAccount 영속화
+   ├─ Home      저장된 결과 집계 (점수 · 카드 · riskSummary)
+   └─ Risks     서비스 상세 · 조치 상태 · 휴면
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
-
-## Project setup
-
-```bash
-$ npm install
+PostgreSQL (Prisma)          AI Server (AI_SERVER_URL)
 ```
 
-## Compile and run the project
+### 핵심 도메인
+
+| 모델 | 역할 |
+|------|------|
+| `User` | IDly 회원, 약관/알림 동의 |
+| `GmailAccount` | 연결된 Gmail, refreshToken(암호화), `connected` / `reconnect_required` |
+| `AnalysisRun` | 비동기 분석 작업 단위 |
+| `ServiceAccount` | 서비스별 위험 상태 (`action_required` / `watch` / …) |
+| `RiskEvidence` | 근거 메일 메타 (`evidenceHash` 중복 방지, 본문 미저장) |
+| `ActionItem` | 조치 체크리스트 |
+
+### 분석 파이프라인
+
+1. `POST /api/analysis/start` → `analysisId` 즉시 반환
+2. 백그라운드: Gmail 수집 → AI 분석 → DB upsert
+3. `GET /api/analysis/:id/status` 폴링
+4. `completed` 시 `GET /api/home`으로 카드/점수 조회
+
+- AI 전량 실패 또는 Gmail 전량 실패 → run `failed`
+- 일부 계정만 실패 → `completed` + `failedReason`에 partial 기록
+- 30분 이상 `queued`/`scanning` orphan → 기동/시작 시 `failed` 복구
+
+## 로컬 실행
 
 ```bash
-# development
-$ npm run start
-
-# watch mode
-$ npm run start:dev
-
-# production mode
-$ npm run start:prod
+npm install
+cp .env.example .env   # 없으면 아래 환경변수 직접 설정
+npx prisma migrate dev
+npm run start:dev
 ```
 
-## Run tests
+- API: `http://localhost:3000/api`
+- Swagger: `http://localhost:3000/docs`
+- Health: `http://localhost:3000/api/health`
+
+## 환경변수
+
+| 변수 | 설명 |
+|------|------|
+| `DATABASE_URL` | PostgreSQL 연결 문자열 |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` / `GOOGLE_REDIRECT_URI` | OAuth |
+| `JWT_SECRET` | Access JWT 서명 (prod 필수) |
+| `JWT_EXPIRES_IN` | 기본 `7d` |
+| `REFRESH_TOKEN_SECRET` | Google refresh token AES-256-GCM 키 (base64 32바이트, prod 필수) |
+| `AI_SERVER_URL` | 분석 서버 base URL |
+| `FRONTEND_URL` / `LANDING_URL` | CORS · OAuth 리다이렉트 |
+| `NODE_ENV` | `production` 시 시크릿 강제 |
+
+## 스크립트
 
 ```bash
-# unit tests
-$ npm run test
-
-# e2e tests
-$ npm run test:e2e
-
-# test coverage
-$ npm run test:cov
+npm run build       # prisma generate + nest build
+npm run start:dev
+npm test            # unit tests
+npx tsc --noEmit
 ```
 
-## Deployment
+## CI/CD
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
+- **CI** (PR → `dev`/`main`): install → prisma generate → tsc → test → build
+- **CD** (push → `main`): migrate deploy → Render deploy trigger → live 대기
 
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+## 보안 메모
 
-```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
-```
-
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
-
-## Resources
-
-Check out a few resources that may come in handy when working with NestJS:
-
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
-
-## Support
-
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
-
-## Stay in touch
-
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
-
-## License
-
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+- Google refresh token은 DB에 `enc:v1:` AES-256-GCM 으로 저장
+- 이미 다른 IDly 유저에 연결된 Gmail을 “추가 연동”하면 **409 / `gmail_already_linked`** (세션 탈취 방지)
+- 리소스 API는 `userId` 소유권 검증 (`analysis`, `gmail`, `service-accounts`)
+- 쿠키-only mutating 요청은 Origin allowlist 검사

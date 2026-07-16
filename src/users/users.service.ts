@@ -1,7 +1,10 @@
-import { Injectable } from '@nestjs/common';
+import { ConflictException, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
-import { encryptToken, resolveEncryptionKey } from '../common/crypto/token-crypto';
+import {
+  encryptToken,
+  resolveEncryptionKey,
+} from '../common/crypto/token-crypto';
 
 @Injectable()
 export class UsersService {
@@ -23,17 +26,26 @@ export class UsersService {
     refreshToken: string;
     addToUserId?: string; // 추가 계정 연결 시 기존 유저 ID
   }) {
-    // 이미 연결된 Gmail 계정인지 확인
     const existing = await this.prisma.gmailAccount.findUnique({
       where: { email: data.email },
       include: { user: true },
     });
 
     if (existing) {
-      // refresh_token 갱신
+      // 추가 연동 모드: 이미 다른 IDly 유저에 연결된 Gmail이면 세션 혼선/탈취 방지
+      if (data.addToUserId && existing.userId !== data.addToUserId) {
+        throw new ConflictException(
+          '이미 다른 IDly 계정에 연결된 Gmail입니다. 해당 계정으로 로그인하거나 연결을 해제한 뒤 다시 시도해 주세요.',
+        );
+      }
+
+      // 로그인 또는 동일 유저 재연동: refresh token만 갱신
       const gmailAccount = await this.prisma.gmailAccount.update({
         where: { email: data.email },
-        data: { refreshToken: encryptToken(data.refreshToken, this.encryptionKey) },
+        data: {
+          refreshToken: encryptToken(data.refreshToken, this.encryptionKey),
+          status: 'connected',
+        },
         include: { user: true },
       });
       return { user: gmailAccount.user, gmailAccount };
@@ -50,6 +62,7 @@ export class UsersService {
           email: data.email,
           refreshToken: encryptToken(data.refreshToken, this.encryptionKey),
           isPrimary: false,
+          status: 'connected',
         },
       });
       return { user, gmailAccount };
@@ -64,6 +77,7 @@ export class UsersService {
             email: data.email,
             refreshToken: encryptToken(data.refreshToken, this.encryptionKey),
             isPrimary: true,
+            status: 'connected',
           },
         },
       },
