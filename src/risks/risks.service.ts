@@ -88,7 +88,7 @@ export class RisksService {
       (a) => a.status !== 'dormant' && a.status !== 'skipped',
     );
     const actionRequiredCount = activeAccounts.filter(
-      (a) => a.status === 'action_required' || a.status === 'watch',
+      (a) => a.status === 'action_required',
     ).length;
     const highCount = activeAccounts.filter((a) => a.riskLevel === 'high').length;
     const mediumCount = activeAccounts.filter((a) => a.riskLevel === 'medium').length;
