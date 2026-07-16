@@ -16,11 +16,10 @@ export class AuthController {
   private readonly COOKIE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7일
 
   @Get('google')
-  @ApiTags('1-2. 회원가입')
   @ApiOperation({
     summary: 'Google OAuth 시작 — 로그인 + 서브 계정 추가 통합',
     description: `
-**화면 01 · 로그인** / **화면 05 · 연결 계정 추가** — 엔드포인트 동일
+**화면 01 · 로그인** / **화면 05 · 연결 계정 추가(1-2-5)** — 엔드포인트 동일
 
 - **\`idly_token\` 쿠키 없이 호출** → 신규 유저 생성 (대표 계정 \`isPrimary: true\`)
 - **\`idly_token\` 쿠키 포함 후 호출** → 기존 유저에 서브 계정 추가 (\`isPrimary: false\`)
