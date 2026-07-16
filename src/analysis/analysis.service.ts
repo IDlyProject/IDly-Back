@@ -96,7 +96,9 @@ export class AnalysisService {
       },
     });
 
-    setImmediate(() => this.runPipeline(run.id, userId, accounts).catch(() => {}));
+    setImmediate(() =>
+      this.runPipeline(run.id, userId, accounts).catch(() => {}),
+    );
 
     return {
       analysisId: run.id,
@@ -111,13 +113,16 @@ export class AnalysisService {
   }
 
   async getStatus(analysisId: string) {
-    const run = await this.prisma.analysisRun.findUniqueOrThrow({ where: { id: analysisId } });
+    const run = await this.prisma.analysisRun.findUniqueOrThrow({
+      where: { id: analysisId },
+    });
     return {
       analysisId: run.id,
       status: run.status,
       progress: run.progress,
       currentStep: run.currentStep,
-      displayMessage: run.displayMessage ?? STEP_MESSAGES[run.currentStep] ?? '',
+      displayMessage:
+        run.displayMessage ?? STEP_MESSAGES[run.currentStep] ?? '',
       completedAt: run.completedAt?.toISOString() ?? null,
       errorMessage: run.status === 'failed' ? (run.failedReason ?? null) : null,
     };
@@ -145,7 +150,9 @@ export class AnalysisService {
           continue;
         }
 
-        this.logger.log(`[${account.email}] ${count}개, ${sizeBytes} bytes → AI 전송`);
+        this.logger.log(
+          `[${account.email}] ${count}개, ${sizeBytes} bytes → AI 전송`,
+        );
 
         let aiResult: AiAnalyzeResponse = { accounts: [] };
         try {
@@ -198,7 +205,10 @@ export class AnalysisService {
   private async uploadMboxToAI(mbox: Buffer): Promise<AiAnalyzeResponse> {
     const aiUrl = this.config.get('AI_SERVER_URL', 'http://localhost:8000');
     const form = new FormData();
-    form.append('file', mbox, { filename: 'analysis.mbox', contentType: 'application/mbox' });
+    form.append('file', mbox, {
+      filename: 'analysis.mbox',
+      contentType: 'application/mbox',
+    });
 
     const { data } = await firstValueFrom(
       this.httpService.post(`${aiUrl}/analyze`, form, {
@@ -220,10 +230,16 @@ export class AnalysisService {
       const registry = resolveService(accountName);
       const riskLevel = this.toRiskLevel(ai.security_level, ai.security_score);
       const status = this.toStatus(riskLevel);
-      const primaryRiskType = riskLevel !== 'safe' ? this.inferRiskType(ai) : null;
+      const primaryRiskType =
+        riskLevel !== 'safe' ? this.inferRiskType(ai) : null;
 
       const sa = await this.prisma.serviceAccount.upsert({
-        where: { gmailAccountId_serviceName: { gmailAccountId, serviceName: registry.serviceName } },
+        where: {
+          gmailAccountId_serviceName: {
+            gmailAccountId,
+            serviceName: registry.serviceName,
+          },
+        },
         create: {
           gmailAccountId,
           analysisRunId: runId,
@@ -253,7 +269,9 @@ export class AnalysisService {
         },
       });
 
-      await this.prisma.riskEvidence.deleteMany({ where: { serviceAccountId: sa.id } });
+      await this.prisma.riskEvidence.deleteMany({
+        where: { serviceAccountId: sa.id },
+      });
 
       for (const mail of ai.problem_mails ?? []) {
         if (!mail.subject && !mail.date) continue;
@@ -302,12 +320,13 @@ export class AnalysisService {
 
   private toRiskLevel(level?: string, score?: number): RiskLevel {
     if (level === '위험') return score && score >= 7 ? 'high' : 'medium';
-    if (level === '주의') return 'low';
+    if (level === '주의') return 'medium';
     return 'safe';
   }
 
   private toStatus(riskLevel: RiskLevel): AccountStatus {
-    if (riskLevel === 'high' || riskLevel === 'medium') return 'action_required';
+    if (riskLevel === 'high' || riskLevel === 'medium')
+      return 'action_required';
     if (riskLevel === 'low') return 'watch';
     return 'safe';
   }
@@ -321,17 +340,27 @@ export class AnalysisService {
   private inferRiskType(ai: AiAccountAnalysis): RiskType {
     const haystack = [
       ai.interpretation,
-      ...(ai.problem_mails ?? []).flatMap((m) => [m.subject, m.matched_keywords]),
+      ...(ai.problem_mails ?? []).flatMap((m) => [
+        m.subject,
+        m.matched_keywords,
+      ]),
     ]
       .filter(Boolean)
       .join('\n')
       .toLowerCase();
 
-    if (this.has(haystack, ['새 기기', '새 로그인', 'new device', 'new login'])) return 'new_device_login';
-    if (this.has(haystack, ['비밀번호 재설정', 'password reset', 'recover'])) return 'password_reset';
-    if (this.has(haystack, ['인증 코드', 'verification code', 'otp', '인증번호'])) return 'verification_code';
-    if (this.has(haystack, ['계정 복구', 'account recovery'])) return 'account_recovery';
-    if (this.has(haystack, ['권한', 'permission', 'authorized app'])) return 'permission_grant';
+    if (this.has(haystack, ['새 기기', '새 로그인', 'new device', 'new login']))
+      return 'new_device_login';
+    if (this.has(haystack, ['비밀번호 재설정', 'password reset', 'recover']))
+      return 'password_reset';
+    if (
+      this.has(haystack, ['인증 코드', 'verification code', 'otp', '인증번호'])
+    )
+      return 'verification_code';
+    if (this.has(haystack, ['계정 복구', 'account recovery']))
+      return 'account_recovery';
+    if (this.has(haystack, ['권한', 'permission', 'authorized app']))
+      return 'permission_grant';
     return 'security_recommendation';
   }
 
@@ -342,42 +371,119 @@ export class AnalysisService {
   private getActionTemplate(
     riskType: RiskType,
     registry: ReturnType<typeof resolveService>,
-  ): { title: string; description: string; isRequired: boolean; externalUrl?: string | null }[] {
+  ): {
+    title: string;
+    description: string;
+    isRequired: boolean;
+    externalUrl?: string | null;
+  }[] {
     const officialStep = registry.officialUrl
-      ? [{ title: '공식 페이지 열기', description: '메일 링크가 아닌 공식 사이트로 이동해요.', isRequired: false, externalUrl: registry.officialUrl }]
+      ? [
+          {
+            title: '공식 페이지 열기',
+            description: '메일 링크가 아닌 공식 사이트로 이동해요.',
+            isRequired: false,
+            externalUrl: registry.officialUrl,
+          },
+        ]
       : [];
-    const passwordStep = { title: '새 비밀번호로 변경', description: '이전 조합과 겹치지 않는 비밀번호를 사용해요.', isRequired: true, externalUrl: registry.passwordUrl };
+    const passwordStep = {
+      title: '새 비밀번호로 변경',
+      description: '이전 조합과 겹치지 않는 비밀번호를 사용해요.',
+      isRequired: true,
+      externalUrl: registry.passwordUrl,
+    };
 
-    const templates: Record<RiskType, { title: string; description: string; isRequired: boolean; externalUrl?: string | null }[]> = {
+    const templates: Record<
+      RiskType,
+      {
+        title: string;
+        description: string;
+        isRequired: boolean;
+        externalUrl?: string | null;
+      }[]
+    > = {
       new_device_login: [
         ...officialStep,
         passwordStep,
-        { title: '알 수 없는 기기 로그아웃', description: '최근 로그인 기기 목록에서 모르는 기기를 제거해요.', isRequired: true },
-        { title: '같은 비밀번호를 쓰는 계정 점검', description: '비밀번호를 재사용 중인 다른 계정도 바꿔요.', isRequired: false },
+        {
+          title: '알 수 없는 기기 로그아웃',
+          description: '최근 로그인 기기 목록에서 모르는 기기를 제거해요.',
+          isRequired: true,
+        },
+        {
+          title: '같은 비밀번호를 쓰는 계정 점검',
+          description: '비밀번호를 재사용 중인 다른 계정도 바꿔요.',
+          isRequired: false,
+        },
       ],
       password_reset: [
-        { title: '재설정 요청이 본인 활동인지 확인', description: '내가 요청한 게 아니라면 바로 비밀번호를 바꿔요.', isRequired: true },
+        {
+          title: '재설정 요청이 본인 활동인지 확인',
+          description: '내가 요청한 게 아니라면 바로 비밀번호를 바꿔요.',
+          isRequired: true,
+        },
         passwordStep,
-        { title: '복구 이메일·전화번호 확인', description: '내 정보로 설정되어 있는지 확인해요.', isRequired: false },
+        {
+          title: '복구 이메일·전화번호 확인',
+          description: '내 정보로 설정되어 있는지 확인해요.',
+          isRequired: false,
+        },
       ],
       verification_code: [
-        { title: '인증 코드 요청이 본인 활동인지 확인', description: '내가 요청한 게 아니라면 무시하고 비밀번호를 바꿔요.', isRequired: true },
-        { title: '최근 로그인 기록 확인', description: '모르는 접속 기록이 있는지 확인해요.', isRequired: true },
+        {
+          title: '인증 코드 요청이 본인 활동인지 확인',
+          description: '내가 요청한 게 아니라면 무시하고 비밀번호를 바꿔요.',
+          isRequired: true,
+        },
+        {
+          title: '최근 로그인 기록 확인',
+          description: '모르는 접속 기록이 있는지 확인해요.',
+          isRequired: true,
+        },
       ],
       account_recovery: [
-        { title: '복구 요청이 본인 활동인지 확인', description: '내가 요청한 게 아니라면 즉시 비밀번호를 바꿔요.', isRequired: true },
+        {
+          title: '복구 요청이 본인 활동인지 확인',
+          description: '내가 요청한 게 아니라면 즉시 비밀번호를 바꿔요.',
+          isRequired: true,
+        },
         passwordStep,
-        { title: '복구 이메일·전화번호 재설정', description: '내 정보로 다시 설정해요.', isRequired: false },
+        {
+          title: '복구 이메일·전화번호 재설정',
+          description: '내 정보로 다시 설정해요.',
+          isRequired: false,
+        },
       ],
       permission_grant: [
-        { title: '연결된 앱·권한 목록 확인', description: '모르는 앱이 있으면 권한을 해제해요.', isRequired: true },
-        { title: '모르는 앱 권한 해제', description: '사용하지 않거나 모르는 앱은 바로 해제해요.', isRequired: true },
-        { title: '비밀번호 변경', description: '의심스러운 접근이 있었다면 비밀번호도 바꿔요.', isRequired: false },
+        {
+          title: '연결된 앱·권한 목록 확인',
+          description: '모르는 앱이 있으면 권한을 해제해요.',
+          isRequired: true,
+        },
+        {
+          title: '모르는 앱 권한 해제',
+          description: '사용하지 않거나 모르는 앱은 바로 해제해요.',
+          isRequired: true,
+        },
+        {
+          title: '비밀번호 변경',
+          description: '의심스러운 접근이 있었다면 비밀번호도 바꿔요.',
+          isRequired: false,
+        },
       ],
       security_recommendation: [
         ...officialStep,
-        { title: '보안 알림 확인', description: '공식 사이트에서 직접 보안 상태를 확인해요.', isRequired: false },
-        { title: '2단계 인증 설정 확인', description: '2단계 인증이 켜져 있는지 확인해요.', isRequired: false },
+        {
+          title: '보안 알림 확인',
+          description: '공식 사이트에서 직접 보안 상태를 확인해요.',
+          isRequired: false,
+        },
+        {
+          title: '2단계 인증 설정 확인',
+          description: '2단계 인증이 켜져 있는지 확인해요.',
+          isRequired: false,
+        },
       ],
     };
 

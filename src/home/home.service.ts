@@ -2,9 +2,24 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
 const CARD_NEWS = [
-  { id: 'cn_001', emoji: '🏠', title: '불 꺼진 창문, 그냥 두면 위험한 이유', url: 'https://idly.kr/news/1' },
-  { id: 'cn_002', emoji: '🔑', title: '비밀번호 하나로 다 쓰면 생기는 일', url: 'https://idly.kr/news/2' },
-  { id: 'cn_003', emoji: '📱', title: '2단계 인증, 이렇게 하면 더 안전해요', url: 'https://idly.kr/news/3' },
+  {
+    id: 'cn_001',
+    emoji: '🏠',
+    title: '불 꺼진 창문, 그냥 두면 위험한 이유',
+    url: 'https://idly.kr/news/1',
+  },
+  {
+    id: 'cn_002',
+    emoji: '🔑',
+    title: '비밀번호 하나로 다 쓰면 생기는 일',
+    url: 'https://idly.kr/news/2',
+  },
+  {
+    id: 'cn_003',
+    emoji: '📱',
+    title: '2단계 인증, 이렇게 하면 더 안전해요',
+    url: 'https://idly.kr/news/3',
+  },
 ];
 
 @Injectable()
@@ -22,7 +37,15 @@ export class HomeService {
         userId,
         ...(mailAccountId !== 'all' ? { id: mailAccountId } : {}),
       },
-      include: { serviceAccounts: true },
+      include: {
+        serviceAccounts: {
+          include: {
+            _count: {
+              select: { riskEvidences: true },
+            },
+          },
+        },
+      },
     });
 
     const latestRun = await this.prisma.analysisRun.findFirst({
@@ -34,33 +57,52 @@ export class HomeService {
       latestRun?.status === 'queued' || latestRun?.status === 'scanning'
         ? { status: 'scanning' as const, analysisId: latestRun.id }
         : latestRun?.status === 'failed'
-        ? { status: 'failed' as const, analysisId: latestRun.id }
-        : { status: 'idle' as const, analysisId: null };
+          ? { status: 'failed' as const, analysisId: latestRun.id }
+          : { status: 'idle' as const, analysisId: null };
 
     const lastRun = await this.prisma.analysisRun.findFirst({
       where: { userId, status: 'completed' },
       orderBy: { completedAt: 'desc' },
     });
 
-    const allServiceAccounts = gmailAccounts.flatMap((ga) => ga.serviceAccounts).filter((sa) => sa.status !== 'dormant');
+    const allServiceAccounts = gmailAccounts
+      .flatMap((ga) => ga.serviceAccounts)
+      .filter((sa) => sa.status !== 'dormant');
 
     const actionRequiredCount = allServiceAccounts.filter(
       (sa) => sa.status === 'action_required' || sa.status === 'watch',
     ).length;
 
-    const highCount = allServiceAccounts.filter((sa) => sa.riskLevel === 'high').length;
-    const mediumCount = allServiceAccounts.filter((sa) => sa.riskLevel === 'medium').length;
-    const lowCount = allServiceAccounts.filter((sa) => sa.riskLevel === 'low').length;
-    const resolvedCount = allServiceAccounts.filter((sa) => sa.status === 'resolved').length;
+    const highCount = allServiceAccounts.filter(
+      (sa) => sa.riskLevel === 'high',
+    ).length;
+    const mediumCount = allServiceAccounts.filter(
+      (sa) => sa.riskLevel === 'medium',
+    ).length;
+    const lowCount = allServiceAccounts.filter(
+      (sa) => sa.riskLevel === 'low',
+    ).length;
+    const resolvedCount = allServiceAccounts.filter(
+      (sa) => sa.status === 'resolved',
+    ).length;
 
     const securityScore = Math.max(
       0,
-      Math.min(100, 100 - highCount * 12 - mediumCount * 6 - lowCount * 2 + resolvedCount * 3),
+      Math.min(
+        100,
+        100 -
+          highCount * 12 -
+          mediumCount * 6 -
+          lowCount * 2 +
+          resolvedCount * 3,
+      ),
     );
 
     const topRisk = allServiceAccounts
       .filter((sa) => sa.status === 'action_required')
-      .sort((a, b) => this.riskWeight(b.riskLevel) - this.riskWeight(a.riskLevel))[0];
+      .sort(
+        (a, b) => this.riskWeight(b.riskLevel) - this.riskWeight(a.riskLevel),
+      )[0];
 
     const riskSummary = topRisk
       ? {
@@ -88,7 +130,9 @@ export class HomeService {
         label: ga.label ?? 'Gmail동',
         role: ga.isPrimary ? 'primary' : 'connected',
         status: ga.status,
-        serviceAccountCount: ga.serviceAccounts.length,
+        serviceAccountCount: ga.serviceAccounts.filter(
+          (sa) => sa.status !== 'dormant',
+        ).length,
       })),
       metrics: {
         totalServiceAccounts: allServiceAccounts.length,
@@ -106,6 +150,7 @@ export class HomeService {
         riskLevel: sa.riskLevel,
         status: sa.status,
         primaryRiskType: sa.primaryRiskType,
+        evidenceCount: sa._count.riskEvidences,
       })),
       cardNews: CARD_NEWS,
     };
@@ -128,6 +173,10 @@ export class HomeService {
   }
 
   private riskLevelLabel(level: string): string {
-    return { high: '위험도 높음', medium: '위험도 중간', low: '주의', safe: '안전' }[level] ?? '';
+    return (
+      { high: '위험도 높음', medium: '위험도 중간', low: '주의', safe: '안전' }[
+        level
+      ] ?? ''
+    );
   }
 }
