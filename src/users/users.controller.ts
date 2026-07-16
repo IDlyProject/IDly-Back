@@ -21,7 +21,7 @@ import {
   GmailAccountDto,
   UserDto,
   UserProfileDto,
-} from '../common/dto/response.dto';
+} from './dto/user-response.dto';
 
 @ApiBearerAuth('access-token')
 @Controller('users')
