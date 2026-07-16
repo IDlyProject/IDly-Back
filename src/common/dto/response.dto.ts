@@ -11,7 +11,7 @@ export class ServiceAccountSummaryDto {
   riskLevel: string;
 
   @ApiProperty({
-    enum: ['action_required', 'watch', 'safe', 'resolved', 'dormant'],
+    enum: ['action_required', 'watch', 'safe', 'resolved', 'skipped', 'dormant'],
     example: 'action_required',
   })
   status: string;

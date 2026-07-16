@@ -45,10 +45,10 @@ export class AuthService {
     });
   }
 
-  /** JWT 디코딩 (검증 없이) — 만료된 토큰도 payload 추출 가능 */
-  decodeToken(token: string) {
+  /** JWT 검증 — 추가 Gmail 연결 시 기존 로그인 유저를 안전하게 식별 */
+  verifyToken(token: string) {
     try {
-      return this.jwtService.decode(token) as { sub: string; email: string } | null;
+      return this.jwtService.verify(token) as { sub: string; email: string };
     } catch {
       return null;
     }
