@@ -1,10 +1,10 @@
 import { BadRequestException, Controller, Get, Query, Req, Res, UnauthorizedException } from '@nestjs/common';
-import { ApiExcludeEndpoint, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiExcludeEndpoint, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
 import { AuthService } from './auth.service';
 import { ConfigService } from '@nestjs/config';
 
-@ApiTags('onboarding')
+@ApiTags('1-1. 로그인')
 @Controller('auth')
 export class AuthController {
   constructor(
@@ -17,9 +17,9 @@ export class AuthController {
 
   @Get('google')
   @ApiOperation({
-    summary: '[화면 01·05] Google OAuth 시작 — 로그인 + 서브 계정 추가 통합',
+    summary: 'Google OAuth 시작 — 로그인 + 서브 계정 추가 통합',
     description: `
-**화면 01 · 로그인** / **화면 05 · 연결 계정 추가** — 엔드포인트 동일
+**화면 01 · 로그인** / **화면 05 · 연결 계정 추가(1-2-5)** — 엔드포인트 동일
 
 - **\`idly_token\` 쿠키 없이 호출** → 신규 유저 생성 (대표 계정 \`isPrimary: true\`)
 - **\`idly_token\` 쿠키 포함 후 호출** → 기존 유저에 서브 계정 추가 (\`isPrimary: false\`)
@@ -31,6 +31,7 @@ export class AuthController {
 - \`{FRONTEND_URL}/auth/callback?mode={login|add}\` 로 리다이렉트
     `.trim(),
   })
+  @ApiResponse({ status: 302, description: 'Google OAuth 페이지로 리다이렉트' })
   googleAuth(@Req() req: Request, @Res() res: Response) {
     const cookieToken = (req as any).cookies?.[this.COOKIE_NAME];
     const authHeader = req.headers.authorization as string | undefined;
@@ -39,7 +40,7 @@ export class AuthController {
     let userId: string | undefined;
 
     if (rawToken) {
-      const payload = this.authService.decodeToken(rawToken);
+      const payload = this.authService.verifyToken(rawToken);
       if (!payload?.sub) {
         throw new BadRequestException('유효하지 않은 토큰입니다. 다시 로그인해 주세요.');
       }
