@@ -9,7 +9,7 @@ export class UsersService {
     email: string;
     name: string;
     refreshToken: string;
-    addToUserId?: string;   // 추가 계정 연결 시 기존 유저 ID
+    addToUserId?: string; // 추가 계정 연결 시 기존 유저 ID
   }) {
     // 이미 연결된 Gmail 계정인지 확인
     const existing = await this.prisma.gmailAccount.findUnique({
@@ -58,66 +58,135 @@ export class UsersService {
       include: { gmailAccounts: true },
     });
 
-    return { user, gmailAccounts: user.gmailAccounts[0], gmailAccount: user.gmailAccounts[0] };
+    return {
+      user,
+      gmailAccounts: user.gmailAccounts[0],
+      gmailAccount: user.gmailAccounts[0],
+    };
   }
 
   async findById(id: string) {
-    return this.prisma.user.findUnique({
-      where: { id },
-      select: {
-        id: true,
-        name: true,
-        phone: true,
-        ageGroup: true,
-        notificationAgreed: true,
-        marketingAgreed: true,
-        createdAt: true,
-        gmailAccounts: {
-          select: {
-            id: true,
-            email: true,
-            isPrimary: true,
-            label: true,
-            status: true,
-            lastSyncedAt: true,
-            lastEmailReceivedAt: true,
-            createdAt: true,
-            serviceAccounts: {
-              select: {
-                id: true,
-                serviceName: true,
-                riskLevel: true,
-                status: true,
-                lastAnalyzedAt: true,
+    return this.prisma.user
+      .findUnique({
+        where: { id },
+        select: {
+          id: true,
+          name: true,
+          phone: true,
+          ageGroup: true,
+          requiredTermsAgreed: true,
+          requiredTermsAgreedAt: true,
+          notificationAgreed: true,
+          marketingAgreed: true,
+          createdAt: true,
+          gmailAccounts: {
+            select: {
+              id: true,
+              email: true,
+              isPrimary: true,
+              label: true,
+              status: true,
+              lastSyncedAt: true,
+              lastEmailReceivedAt: true,
+              createdAt: true,
+              serviceAccounts: {
+                select: {
+                  id: true,
+                  serviceName: true,
+                  riskLevel: true,
+                  status: true,
+                  lastAnalyzedAt: true,
+                },
               },
             },
           },
         },
-      },
-    });
+      })
+      .then((user) =>
+        user
+          ? {
+              ...user,
+              gmailAccounts: user.gmailAccounts.map((account) => ({
+                ...account,
+                role: account.isPrimary
+                  ? ('primary' as const)
+                  : ('connected' as const),
+              })),
+            }
+          : null,
+      );
   }
 
   async getConnectedAccounts(userId: string) {
-    return this.prisma.gmailAccount.findMany({
+    const accounts = await this.prisma.gmailAccount.findMany({
       where: { userId },
-      include: {
+      select: {
+        id: true,
+        email: true,
+        isPrimary: true,
+        label: true,
+        status: true,
+        lastSyncedAt: true,
+        lastEmailReceivedAt: true,
+        createdAt: true,
         serviceAccounts: {
-          select: { id: true, serviceName: true, riskLevel: true, status: true, lastAnalyzedAt: true },
+          select: {
+            id: true,
+            serviceName: true,
+            riskLevel: true,
+            status: true,
+            lastAnalyzedAt: true,
+          },
         },
       },
       orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
     });
+
+    return accounts.map((account) => ({
+      ...account,
+      role: account.isPrimary ? ('primary' as const) : ('connected' as const),
+    }));
   }
 
-  async updateProfile(userId: string, dto: { name?: string; phone?: string; ageGroup?: string }) {
+  async updateProfile(
+    userId: string,
+    dto: { name?: string; phone?: string; ageGroup?: string },
+  ) {
     return this.prisma.user.update({ where: { id: userId }, data: dto });
   }
 
-  async saveConsent(userId: string, dto: { notificationAgreed?: boolean; marketingAgreed?: boolean }) {
+  async saveConsent(
+    userId: string,
+    dto: {
+      requiredTermsAgreed: true;
+      notificationAgreed?: boolean;
+      marketingAgreed?: boolean;
+    },
+  ) {
+    const user = await this.prisma.user.findUniqueOrThrow({
+      where: { id: userId },
+      select: { requiredTermsAgreedAt: true },
+    });
+
     return this.prisma.user.update({
       where: { id: userId },
-      data: dto,
-      select: { id: true, notificationAgreed: true, marketingAgreed: true },
+      data: {
+        requiredTermsAgreed: true,
+        requiredTermsAgreedAt: user.requiredTermsAgreedAt ?? new Date(),
+        ...(dto.notificationAgreed !== undefined
+          ? { notificationAgreed: dto.notificationAgreed }
+          : {}),
+        ...(dto.marketingAgreed !== undefined
+          ? { marketingAgreed: dto.marketingAgreed }
+          : {}),
+      },
+      select: {
+        id: true,
+        requiredTermsAgreed: true,
+        requiredTermsAgreedAt: true,
+        notificationAgreed: true,
+        marketingAgreed: true,
+      },
     });
   }
 }

@@ -10,7 +10,10 @@ export class ServiceAccountSummaryDto {
   @ApiProperty({ enum: ['high', 'medium', 'low', 'safe'], example: 'high' })
   riskLevel: string;
 
-  @ApiProperty({ enum: ['action_required', 'watch', 'safe', 'resolved', 'dormant'], example: 'action_required' })
+  @ApiProperty({
+    enum: ['action_required', 'watch', 'safe', 'resolved', 'dormant'],
+    example: 'action_required',
+  })
   status: string;
 
   @ApiPropertyOptional({ example: '2026-07-17T00:00:00.000Z' })
@@ -26,6 +29,9 @@ export class GmailAccountDto {
 
   @ApiProperty({ example: true })
   isPrimary: boolean;
+
+  @ApiProperty({ enum: ['primary', 'connected'], example: 'primary' })
+  role: 'primary' | 'connected';
 
   @ApiPropertyOptional({ example: null })
   label: string | null;
@@ -60,6 +66,12 @@ export class UserDto {
   ageGroup: string | null;
 
   @ApiProperty({ example: true })
+  requiredTermsAgreed: boolean;
+
+  @ApiPropertyOptional({ example: '2026-07-17T00:00:00.000Z' })
+  requiredTermsAgreedAt: string | null;
+
+  @ApiProperty({ example: true })
   notificationAgreed: boolean;
 
   @ApiProperty({ example: false })
@@ -70,4 +82,33 @@ export class UserDto {
 
   @ApiProperty({ type: [GmailAccountDto] })
   gmailAccounts: GmailAccountDto[];
+}
+
+export class UserProfileDto {
+  @ApiProperty({ example: 'uuid-user-1' })
+  id: string;
+
+  @ApiPropertyOptional({ example: '홍길동' })
+  name: string | null;
+
+  @ApiPropertyOptional({ example: '010-1234-5678' })
+  phone: string | null;
+
+  @ApiPropertyOptional({ example: '20대' })
+  ageGroup: string | null;
+
+  @ApiProperty({ example: true })
+  requiredTermsAgreed: boolean;
+
+  @ApiPropertyOptional({ example: '2026-07-17T00:00:00.000Z' })
+  requiredTermsAgreedAt: string | null;
+
+  @ApiProperty({ example: true })
+  notificationAgreed: boolean;
+
+  @ApiProperty({ example: false })
+  marketingAgreed: boolean;
+
+  @ApiProperty({ example: '2026-07-01T00:00:00.000Z' })
+  createdAt: string;
 }
