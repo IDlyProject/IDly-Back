@@ -75,22 +75,32 @@ export class RisksService {
     const updated = await this.prisma.serviceAccount.update({
       where: { id: serviceAccountId },
       data: {
-        status: body.status === 'resolved' ? 'resolved' : body.status === 'skipped' ? 'safe' : sa.status,
+        status: this.nextStatus(body.status, sa.riskLevel),
         resolvedAt: body.status === 'resolved' ? new Date() : null,
+        skippedAt: body.status === 'skipped' ? new Date() : null,
       },
     });
 
     const allAccounts = await this.prisma.serviceAccount.findMany({
       where: { gmailAccount: { userId } },
     });
-    const actionRequiredCount = allAccounts.filter(
-      (a) => a.status === 'action_required' || a.status === 'watch',
+    const activeAccounts = allAccounts.filter(
+      (a) => a.status !== 'dormant' && a.status !== 'skipped',
+    );
+    const actionRequiredCount = activeAccounts.filter(
+      (a) => a.status === 'action_required',
     ).length;
-    const highCount = allAccounts.filter((a) => a.riskLevel === 'high').length;
-    const mediumCount = allAccounts.filter((a) => a.riskLevel === 'medium').length;
-    const lowCount = allAccounts.filter((a) => a.riskLevel === 'low').length;
-    const resolvedCount = allAccounts.filter((a) => a.status === 'resolved').length;
-    const securityScore = Math.max(0, Math.min(100, 100 - highCount * 12 - mediumCount * 6 - lowCount * 2 + resolvedCount * 3));
+    const highCount = activeAccounts.filter((a) => a.riskLevel === 'high').length;
+    const mediumCount = activeAccounts.filter((a) => a.riskLevel === 'medium').length;
+    const lowCount = activeAccounts.filter((a) => a.riskLevel === 'low').length;
+    const resolvedCount = activeAccounts.filter((a) => a.status === 'resolved').length;
+    const securityScore = Math.max(
+      0,
+      Math.min(
+        100,
+        100 - highCount * 12 - mediumCount * 6 - lowCount * 2 + resolvedCount * 3,
+      ),
+    );
 
     return {
       serviceAccountId: updated.id,
@@ -98,5 +108,30 @@ export class RisksService {
       resolvedAt: updated.resolvedAt?.toISOString() ?? null,
       homeDelta: { actionRequiredCount, securityScore },
     };
+  }
+
+  async setDormant(serviceAccountId: string, userId: string) {
+    const sa = await this.prisma.serviceAccount.findFirst({
+      where: { id: serviceAccountId, gmailAccount: { userId } },
+    });
+    if (!sa) throw new NotFoundException('서비스를 찾을 수 없습니다.');
+
+    await this.prisma.serviceAccount.update({
+      where: { id: serviceAccountId },
+      data: { status: 'dormant' },
+    });
+
+    return { serviceAccountId, status: 'dormant' };
+  }
+
+  private nextStatus(
+    requestedStatus: 'resolved' | 'skipped' | 'pending',
+    riskLevel: string,
+  ): string {
+    if (requestedStatus === 'resolved') return 'resolved';
+    if (requestedStatus === 'skipped') return 'skipped';
+    if (riskLevel === 'high' || riskLevel === 'medium') return 'action_required';
+    if (riskLevel === 'low') return 'watch';
+    return 'safe';
   }
 }
