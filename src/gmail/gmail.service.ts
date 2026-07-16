@@ -28,24 +28,17 @@ export class GmailService {
    */
   async fetchAllEmailsAsMbox(
     gmailAccountId: string,
-    userId?: string,
+    userId: string,
   ): Promise<{
     mbox: Buffer;
     count: number;
     sizeBytes: number;
     lastEmailDate: Date | null;
   }> {
-    const account = userId
-      ? await this.prisma.gmailAccount.findFirst({
-          where: { id: gmailAccountId, userId },
-        })
-      : await this.prisma.gmailAccount.findUnique({
-          where: { id: gmailAccountId },
-        });
-    if (!account) {
-      if (userId) throw new NotFoundException('Gmail 계정을 찾을 수 없습니다.');
-      return { mbox: Buffer.from(''), count: 0, sizeBytes: 0, lastEmailDate: null };
-    }
+    const account = await this.prisma.gmailAccount.findFirst({
+      where: { id: gmailAccountId, userId },
+    });
+    if (!account) throw new NotFoundException('Gmail 계정을 찾을 수 없습니다.');
 
     const auth = this.getOAuth2Client(account.refreshToken);
     const gmail = google.gmail({ version: 'v1', auth });
