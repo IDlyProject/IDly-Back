@@ -82,19 +82,21 @@ export class AuthController {
       res.redirect(`${frontendUrl}/auth/callback?mode=${mode}`);
     } catch (error) {
       // OAuth 콜백은 브라우저 리다이렉트 경로이므로 JSON 에러 대신 프론트로 에러 코드 전달
-      const message =
-        error instanceof Error ? error.message : 'oauth_callback_failed';
+      const response = (error as any)?.getResponse?.();
       let errorCode = 'oauth_failed';
-      if (
-        typeof message === 'string' &&
-        message.includes('다른 IDly 계정에 연결')
-      ) {
-        errorCode = 'gmail_already_linked';
-      } else if (message.includes('refresh_token')) {
-        errorCode = 'refresh_token_missing';
-      } else if (message.includes('OAuth state')) {
-        errorCode = 'invalid_oauth_state';
+
+      if (typeof response === 'object' && response?.errorCode) {
+        // ConflictException 등 구조화된 errorCode 우선 사용
+        errorCode = response.errorCode;
+      } else {
+        const msg = String(
+          (typeof response === 'object' ? response?.message : response) ??
+            (error instanceof Error ? error.message : ''),
+        );
+        if (msg.includes('refresh_token')) errorCode = 'refresh_token_missing';
+        else if (msg.includes('OAuth state')) errorCode = 'invalid_oauth_state';
       }
+
       res.redirect(
         `${frontendUrl}/auth/callback?error=${encodeURIComponent(errorCode)}`,
       );

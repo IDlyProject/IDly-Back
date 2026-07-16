@@ -34,9 +34,11 @@ export class UsersService {
     if (existing) {
       // 추가 연동 모드: 이미 다른 IDly 유저에 연결된 Gmail이면 세션 혼선/탈취 방지
       if (data.addToUserId && existing.userId !== data.addToUserId) {
-        throw new ConflictException(
-          '이미 다른 IDly 계정에 연결된 Gmail입니다. 해당 계정으로 로그인하거나 연결을 해제한 뒤 다시 시도해 주세요.',
-        );
+        throw new ConflictException({
+          errorCode: 'gmail_already_linked',
+          message:
+            '이미 다른 IDly 계정에 연결된 Gmail입니다. 해당 계정으로 로그인하거나 연결을 해제한 뒤 다시 시도해 주세요.',
+        });
       }
 
       // 로그인 또는 동일 유저 재연동: refresh token만 갱신
