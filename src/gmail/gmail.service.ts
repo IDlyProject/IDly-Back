@@ -2,15 +2,27 @@ import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { google } from 'googleapis';
 import { PrismaService } from '../prisma/prisma.service';
+import {
+  decryptToken,
+  encryptToken,
+  isEncrypted,
+  resolveEncryptionKey,
+} from '../common/crypto/token-crypto';
 
 @Injectable()
 export class GmailService {
   private readonly logger = new Logger(GmailService.name);
+  private readonly encryptionKey: string;
 
   constructor(
     private readonly config: ConfigService,
     private readonly prisma: PrismaService,
-  ) {}
+  ) {
+    this.encryptionKey = resolveEncryptionKey(
+      config.get('REFRESH_TOKEN_SECRET'),
+      config.get('NODE_ENV'),
+    );
+  }
 
   private getOAuth2Client(refreshToken: string) {
     const client = new google.auth.OAuth2(
@@ -40,7 +52,21 @@ export class GmailService {
     });
     if (!account) throw new NotFoundException('Gmail 계정을 찾을 수 없습니다.');
 
-    const auth = this.getOAuth2Client(account.refreshToken);
+    // Decrypt refresh token; lazily migrate plaintext tokens written before encryption was introduced
+    let plainRefreshToken: string;
+    if (isEncrypted(account.refreshToken)) {
+      plainRefreshToken = decryptToken(account.refreshToken, this.encryptionKey);
+    } else {
+      plainRefreshToken = account.refreshToken;
+      this.prisma.gmailAccount
+        .update({
+          where: { id: gmailAccountId },
+          data: { refreshToken: encryptToken(account.refreshToken, this.encryptionKey) },
+        })
+        .catch((e) => this.logger.warn(`refresh token migration failed for ${gmailAccountId}: ${e.message}`));
+    }
+
+    const auth = this.getOAuth2Client(plainRefreshToken);
     const gmail = google.gmail({ version: 'v1', auth });
 
     // 전체 메일 ID 목록 수집 (페이지네이션)

@@ -1,9 +1,21 @@
 import { Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
+import { encryptToken, resolveEncryptionKey } from '../common/crypto/token-crypto';
 
 @Injectable()
 export class UsersService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly encryptionKey: string;
+
+  constructor(
+    private readonly prisma: PrismaService,
+    config: ConfigService,
+  ) {
+    this.encryptionKey = resolveEncryptionKey(
+      config.get('REFRESH_TOKEN_SECRET'),
+      config.get('NODE_ENV'),
+    );
+  }
 
   async upsertFromGoogle(data: {
     email: string;
@@ -21,7 +33,7 @@ export class UsersService {
       // refresh_token 갱신
       const gmailAccount = await this.prisma.gmailAccount.update({
         where: { email: data.email },
-        data: { refreshToken: data.refreshToken },
+        data: { refreshToken: encryptToken(data.refreshToken, this.encryptionKey) },
         include: { user: true },
       });
       return { user: gmailAccount.user, gmailAccount };
@@ -36,7 +48,7 @@ export class UsersService {
         data: {
           userId: data.addToUserId,
           email: data.email,
-          refreshToken: data.refreshToken,
+          refreshToken: encryptToken(data.refreshToken, this.encryptionKey),
           isPrimary: false,
         },
       });
@@ -50,7 +62,7 @@ export class UsersService {
         gmailAccounts: {
           create: {
             email: data.email,
-            refreshToken: data.refreshToken,
+            refreshToken: encryptToken(data.refreshToken, this.encryptionKey),
             isPrimary: true,
           },
         },
