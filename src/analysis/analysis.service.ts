@@ -176,7 +176,7 @@ export class AnalysisService {
         this.logger.log(`[${account.email}] mbox 수집 시작`);
 
         const { mbox, count, sizeBytes, lastEmailDate } =
-          await this.gmailService.fetchAllEmailsAsMbox(account.id);
+          await this.gmailService.fetchAllEmailsAsMbox(account.id, userId);
 
         if (count === 0) {
           this.logger.warn(`[${account.email}] 메일 없음, 건너뜀`);
