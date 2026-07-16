@@ -5,9 +5,10 @@ import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { GmailModule } from './gmail/gmail.module';
 import { AnalysisModule } from './analysis/analysis.module';
-import { AiModule } from './ai/ai.module';
 import { BetaModule } from './beta/beta.module';
 import { HomeModule } from './home/home.module';
+import { RisksModule } from './risks/risks.module';
+import { HealthController } from './health.controller';
 
 @Module({
   imports: [
@@ -17,9 +18,10 @@ import { HomeModule } from './home/home.module';
     UsersModule,
     GmailModule,
     AnalysisModule,
-    AiModule,
     BetaModule,
     HomeModule,
+    RisksModule,
   ],
+  controllers: [HealthController],
 })
 export class AppModule {}

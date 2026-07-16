@@ -7,11 +7,15 @@ datasource db {
 }
 
 model User {
-  id        String   @id @default(uuid())
-  name      String?
-  phone     String?
-  ageGroup  String?
-  createdAt DateTime @default(now())
+  id                    String    @id @default(uuid())
+  name                  String?
+  phone                 String?
+  ageGroup              String?
+  requiredTermsAgreed   Boolean   @default(false)
+  requiredTermsAgreedAt DateTime?
+  notificationAgreed    Boolean   @default(false)
+  marketingAgreed       Boolean   @default(false)
+  createdAt             DateTime  @default(now())
 
   gmailAccounts GmailAccount[]
   analysisRuns  AnalysisRun[]
@@ -47,23 +51,28 @@ model AnalysisRun {
 
   user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   serviceAccounts ServiceAccount[]
+
+  @@index([userId, status])
+  @@index([userId, startedAt])
 }
 
 model ServiceAccount {
   id              String    @id @default(uuid())
   gmailAccountId  String
   analysisRunId   String?
+  aiAccountId     String?
   serviceName     String
   displayName     String?
   iconUrl         String?
   iconLabel       String?
-  riskLevel       String    @default("safe")          // high | medium | low | safe
-  status          String    @default("safe")           // action_required | watch | safe | resolved
-  primaryRiskType String?                              // new_device_login | password_reset | verification_code | account_recovery | permission_grant | security_recommendation
+  riskLevel       String    @default("safe") // high | medium | low | safe
+  status          String    @default("safe") // action_required | watch | safe | resolved | skipped | dormant
+  primaryRiskType String? // new_device_login | password_reset | verification_code | account_recovery | permission_grant | security_recommendation
   headline        String?
   summary         String?
   interpretation  String?
   resolvedAt      DateTime?
+  skippedAt       DateTime?
   lastAnalyzedAt  DateTime?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
@@ -74,6 +83,7 @@ model ServiceAccount {
   actionItems   ActionItem[]
 
   @@unique([gmailAccountId, serviceName])
+  @@index([gmailAccountId, status])
 }
 
 model RiskEvidence {
@@ -88,6 +98,8 @@ model RiskEvidence {
   createdAt        DateTime  @default(now())
 
   serviceAccount ServiceAccount @relation(fields: [serviceAccountId], references: [id], onDelete: Cascade)
+
+  @@unique([serviceAccountId, evidenceHash])
 }
 
 model ActionItem {
@@ -114,10 +126,10 @@ model BetaApplicant {
 
 // IDly-apps-in-toss 서비스에서 사용하는 테이블 — 직접 수정 금지
 model UserResponseLog {
-  userId       String   @map("user_id")
-  actionItemId String   @map("action_item_id")
+  userId       String    @map("user_id")
+  actionItemId String    @map("action_item_id")
   status       String
-  createdAt    DateTime @map("created_at")
+  createdAt    DateTime  @map("created_at")
   completedAt  DateTime? @map("completed_at")
 
   @@id([userId, actionItemId])

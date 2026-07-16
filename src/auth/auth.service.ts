@@ -30,25 +30,30 @@ export class AuthService {
   getAuthUrl(): string {
     return this.oauth2Client.generateAuthUrl({
       access_type: 'offline',
-      prompt: 'consent',   // refresh_token을 항상 받기 위해 consent 강제
+      prompt: 'consent', // refresh_token을 항상 받기 위해 consent 강제
       scope: this.SCOPES,
     });
   }
 
   /** 화면 05 — 추가 계정 연결용 OAuth URL (state에 userId 포함) */
   getAddAccountUrl(userId: string): string {
+    const state = this.jwtService.sign(
+      { addToUserId: userId, purpose: 'add_account' },
+      { expiresIn: '10m' },
+    );
+
     return this.oauth2Client.generateAuthUrl({
       access_type: 'offline',
       prompt: 'consent',
       scope: this.SCOPES,
-      state: Buffer.from(JSON.stringify({ addToUserId: userId })).toString('base64'),
+      state,
     });
   }
 
-  /** JWT 디코딩 (검증 없이) — 만료된 토큰도 payload 추출 가능 */
-  decodeToken(token: string) {
+  /** JWT 검증 — 추가 Gmail 연결 시 기존 로그인 유저를 안전하게 식별 */
+  verifyToken(token: string) {
     try {
-      return this.jwtService.decode(token) as { sub: string; email: string } | null;
+      return this.jwtService.verify(token) as { sub: string; email: string };
     } catch {
       return null;
     }
@@ -61,7 +66,7 @@ export class AuthService {
     if (!tokens.refresh_token) {
       throw new UnauthorizedException(
         'refresh_token이 발급되지 않았습니다.\n' +
-        'Google 계정 > 보안 > IDly 앱 권한을 해제한 뒤 다시 시도해주세요.',
+          'Google 계정 > 보안 > IDly 앱 권한을 해제한 뒤 다시 시도해주세요.',
       );
     }
 
@@ -73,13 +78,21 @@ export class AuthService {
     const email = data.email ?? '';
     const name = data.name ?? '';
 
-    // state 파싱: 추가 계정 연결인지 확인
+    // state 검증: 추가 계정 연결인지 확인
     let addToUserId: string | undefined;
     if (state) {
       try {
-        const parsed = JSON.parse(Buffer.from(state, 'base64').toString());
+        const parsed = this.jwtService.verify(state) as {
+          addToUserId?: string;
+          purpose?: string;
+        };
+        if (parsed.purpose !== 'add_account' || !parsed.addToUserId) {
+          throw new Error('invalid oauth state');
+        }
         addToUserId = parsed.addToUserId;
-      } catch { /* state 파싱 실패 시 무시 */ }
+      } catch {
+        throw new UnauthorizedException('유효하지 않은 OAuth state입니다.');
+      }
     }
 
     const { user, gmailAccount } = await this.usersService.upsertFromGoogle({

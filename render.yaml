@@ -2,8 +2,9 @@ services:
   - type: web
     name: idly-back
     runtime: node
-    buildCommand: npm install && npm run build
+    buildCommand: npm install && npx prisma migrate deploy && npm run build
     startCommand: npm run start:prod
+    healthCheckPath: /api/health
     envVars:
       - key: NODE_ENV
         value: production
@@ -25,5 +26,7 @@ services:
         sync: false
       - key: JWT_EXPIRES_IN
         value: 7d
+      - key: REFRESH_TOKEN_SECRET
+        sync: false
       - key: AI_SERVER_URL
         sync: false

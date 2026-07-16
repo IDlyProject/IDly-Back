@@ -1,27 +1,53 @@
-import { Injectable } from '@nestjs/common';
+import { ConflictException, Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
+import {
+  encryptToken,
+  resolveEncryptionKey,
+} from '../common/crypto/token-crypto';
 
 @Injectable()
 export class UsersService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly encryptionKey: string;
+
+  constructor(
+    private readonly prisma: PrismaService,
+    config: ConfigService,
+  ) {
+    this.encryptionKey = resolveEncryptionKey(
+      config.get('REFRESH_TOKEN_SECRET'),
+      config.get('NODE_ENV'),
+    );
+  }
 
   async upsertFromGoogle(data: {
     email: string;
     name: string;
     refreshToken: string;
-    addToUserId?: string;   // 추가 계정 연결 시 기존 유저 ID
+    addToUserId?: string; // 추가 계정 연결 시 기존 유저 ID
   }) {
-    // 이미 연결된 Gmail 계정인지 확인
     const existing = await this.prisma.gmailAccount.findUnique({
       where: { email: data.email },
       include: { user: true },
     });
 
     if (existing) {
-      // refresh_token 갱신
+      // 추가 연동 모드: 이미 다른 IDly 유저에 연결된 Gmail이면 세션 혼선/탈취 방지
+      if (data.addToUserId && existing.userId !== data.addToUserId) {
+        throw new ConflictException({
+          errorCode: 'gmail_already_linked',
+          message:
+            '이미 다른 IDly 계정에 연결된 Gmail입니다. 해당 계정으로 로그인하거나 연결을 해제한 뒤 다시 시도해 주세요.',
+        });
+      }
+
+      // 로그인 또는 동일 유저 재연동: refresh token만 갱신
       const gmailAccount = await this.prisma.gmailAccount.update({
         where: { email: data.email },
-        data: { refreshToken: data.refreshToken },
+        data: {
+          refreshToken: encryptToken(data.refreshToken, this.encryptionKey),
+          status: 'connected',
+        },
         include: { user: true },
       });
       return { user: gmailAccount.user, gmailAccount };
@@ -36,8 +62,9 @@ export class UsersService {
         data: {
           userId: data.addToUserId,
           email: data.email,
-          refreshToken: data.refreshToken,
+          refreshToken: encryptToken(data.refreshToken, this.encryptionKey),
           isPrimary: false,
+          status: 'connected',
         },
       });
       return { user, gmailAccount };
@@ -50,41 +77,144 @@ export class UsersService {
         gmailAccounts: {
           create: {
             email: data.email,
-            refreshToken: data.refreshToken,
+            refreshToken: encryptToken(data.refreshToken, this.encryptionKey),
             isPrimary: true,
+            status: 'connected',
           },
         },
       },
       include: { gmailAccounts: true },
     });
 
-    return { user, gmailAccounts: user.gmailAccounts[0], gmailAccount: user.gmailAccounts[0] };
+    return {
+      user,
+      gmailAccounts: user.gmailAccounts[0],
+      gmailAccount: user.gmailAccounts[0],
+    };
   }
 
   async findById(id: string) {
-    return this.prisma.user.findUnique({
-      where: { id },
-      include: {
-        gmailAccounts: {
-          include: { serviceAccounts: true },
+    return this.prisma.user
+      .findUnique({
+        where: { id },
+        select: {
+          id: true,
+          name: true,
+          phone: true,
+          ageGroup: true,
+          requiredTermsAgreed: true,
+          requiredTermsAgreedAt: true,
+          notificationAgreed: true,
+          marketingAgreed: true,
+          createdAt: true,
+          gmailAccounts: {
+            select: {
+              id: true,
+              email: true,
+              isPrimary: true,
+              label: true,
+              status: true,
+              lastSyncedAt: true,
+              lastEmailReceivedAt: true,
+              createdAt: true,
+              serviceAccounts: {
+                select: {
+                  id: true,
+                  serviceName: true,
+                  riskLevel: true,
+                  status: true,
+                  lastAnalyzedAt: true,
+                },
+              },
+            },
+          },
         },
-      },
-    });
+      })
+      .then((user) =>
+        user
+          ? {
+              ...user,
+              gmailAccounts: user.gmailAccounts.map((account) => ({
+                ...account,
+                role: account.isPrimary
+                  ? ('primary' as const)
+                  : ('connected' as const),
+              })),
+            }
+          : null,
+      );
   }
 
   async getConnectedAccounts(userId: string) {
-    return this.prisma.gmailAccount.findMany({
+    const accounts = await this.prisma.gmailAccount.findMany({
       where: { userId },
-      include: {
+      select: {
+        id: true,
+        email: true,
+        isPrimary: true,
+        label: true,
+        status: true,
+        lastSyncedAt: true,
+        lastEmailReceivedAt: true,
+        createdAt: true,
         serviceAccounts: {
-          select: { id: true, serviceName: true, riskLevel: true, status: true, lastAnalyzedAt: true },
+          select: {
+            id: true,
+            serviceName: true,
+            riskLevel: true,
+            status: true,
+            lastAnalyzedAt: true,
+          },
         },
       },
       orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
     });
+
+    return accounts.map((account) => ({
+      ...account,
+      role: account.isPrimary ? ('primary' as const) : ('connected' as const),
+    }));
   }
 
-  async updateProfile(userId: string, dto: { name?: string; phone?: string; ageGroup?: string }) {
+  async updateProfile(
+    userId: string,
+    dto: { name?: string; phone?: string; ageGroup?: string },
+  ) {
     return this.prisma.user.update({ where: { id: userId }, data: dto });
+  }
+
+  async saveConsent(
+    userId: string,
+    dto: {
+      requiredTermsAgreed: true;
+      notificationAgreed?: boolean;
+      marketingAgreed?: boolean;
+    },
+  ) {
+    const user = await this.prisma.user.findUniqueOrThrow({
+      where: { id: userId },
+      select: { requiredTermsAgreedAt: true },
+    });
+
+    return this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        requiredTermsAgreed: true,
+        requiredTermsAgreedAt: user.requiredTermsAgreedAt ?? new Date(),
+        ...(dto.notificationAgreed !== undefined
+          ? { notificationAgreed: dto.notificationAgreed }
+          : {}),
+        ...(dto.marketingAgreed !== undefined
+          ? { marketingAgreed: dto.marketingAgreed }
+          : {}),
+      },
+      select: {
+        id: true,
+        requiredTermsAgreed: true,
+        requiredTermsAgreedAt: true,
+        notificationAgreed: true,
+        marketingAgreed: true,
+      },
+    });
   }
 }

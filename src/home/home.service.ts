@@ -1,10 +1,30 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import {
+  computeSecurityScore,
+  countActionRequired,
+  isActiveForHomeMetrics,
+} from '../common/domain/metrics';
 
 const CARD_NEWS = [
-  { id: 'cn_001', emoji: '🏠', title: '불 꺼진 창문, 그냥 두면 위험한 이유', url: 'https://idly.kr/news/1' },
-  { id: 'cn_002', emoji: '🔑', title: '비밀번호 하나로 다 쓰면 생기는 일', url: 'https://idly.kr/news/2' },
-  { id: 'cn_003', emoji: '📱', title: '2단계 인증, 이렇게 하면 더 안전해요', url: 'https://idly.kr/news/3' },
+  {
+    id: 'cn_001',
+    emoji: '🏠',
+    title: '불 꺼진 창문, 그냥 두면 위험한 이유',
+    url: 'https://idly.kr/news/1',
+  },
+  {
+    id: 'cn_002',
+    emoji: '🔑',
+    title: '비밀번호 하나로 다 쓰면 생기는 일',
+    url: 'https://idly.kr/news/2',
+  },
+  {
+    id: 'cn_003',
+    emoji: '📱',
+    title: '2단계 인증, 이렇게 하면 더 안전해요',
+    url: 'https://idly.kr/news/3',
+  },
 ];
 
 @Injectable()
@@ -12,48 +32,66 @@ export class HomeService {
   constructor(private readonly prisma: PrismaService) {}
 
   async getHome(userId: string, mailAccountId: string = 'all') {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { name: true },
+    });
+
     const gmailAccounts = await this.prisma.gmailAccount.findMany({
       where: {
         userId,
         ...(mailAccountId !== 'all' ? { id: mailAccountId } : {}),
       },
-      include: { serviceAccounts: true },
+      include: {
+        serviceAccounts: {
+          include: {
+            _count: {
+              select: { riskEvidences: true },
+            },
+          },
+        },
+      },
     });
 
     const latestRun = await this.prisma.analysisRun.findFirst({
-      where: { userId, status: { in: ['queued', 'scanning', 'completed'] } },
+      where: { userId },
       orderBy: { startedAt: 'desc' },
     });
 
     const backgroundAnalysis =
       latestRun?.status === 'queued' || latestRun?.status === 'scanning'
         ? { status: 'scanning' as const, analysisId: latestRun.id }
-        : { status: 'idle' as const, analysisId: null };
+        : latestRun?.status === 'failed'
+          ? { status: 'failed' as const, analysisId: latestRun.id }
+          : { status: 'idle' as const, analysisId: null };
 
     const lastRun = await this.prisma.analysisRun.findFirst({
       where: { userId, status: 'completed' },
       orderBy: { completedAt: 'desc' },
     });
 
-    const allServiceAccounts = gmailAccounts.flatMap((ga) => ga.serviceAccounts);
+    const allServiceAccounts = gmailAccounts
+      .flatMap((ga) =>
+        ga.serviceAccounts.map((sa) => ({
+          ...sa,
+          sourceMailAccount: {
+            id: ga.id,
+            email: ga.email,
+            label: ga.label ?? 'Gmail동',
+            role: ga.isPrimary ? 'primary' : 'connected',
+          },
+        })),
+      )
+      .filter((sa) => isActiveForHomeMetrics(sa.status));
 
-    const actionRequiredCount = allServiceAccounts.filter(
-      (sa) => sa.status === 'action_required' || sa.status === 'watch',
-    ).length;
-
-    const highCount = allServiceAccounts.filter((sa) => sa.riskLevel === 'high').length;
-    const mediumCount = allServiceAccounts.filter((sa) => sa.riskLevel === 'medium').length;
-    const lowCount = allServiceAccounts.filter((sa) => sa.riskLevel === 'low').length;
-    const resolvedCount = allServiceAccounts.filter((sa) => sa.status === 'resolved').length;
-
-    const securityScore = Math.max(
-      0,
-      Math.min(100, 100 - highCount * 12 - mediumCount * 6 - lowCount * 2 + resolvedCount * 3),
-    );
+    const actionRequiredCount = countActionRequired(allServiceAccounts);
+    const securityScore = computeSecurityScore(allServiceAccounts);
 
     const topRisk = allServiceAccounts
       .filter((sa) => sa.status === 'action_required')
-      .sort((a, b) => this.riskWeight(b.riskLevel) - this.riskWeight(a.riskLevel))[0];
+      .sort(
+        (a, b) => this.riskWeight(b.riskLevel) - this.riskWeight(a.riskLevel),
+      )[0];
 
     const riskSummary = topRisk
       ? {
@@ -71,6 +109,7 @@ export class HomeService {
 
     return {
       analysisId: lastRun?.id ?? null,
+      userName: user?.name ?? null,
       selectedMailAccountId: mailAccountId,
       lastAnalyzedAt: lastRun?.completedAt?.toISOString() ?? null,
       backgroundAnalysis,
@@ -80,7 +119,9 @@ export class HomeService {
         label: ga.label ?? 'Gmail동',
         role: ga.isPrimary ? 'primary' : 'connected',
         status: ga.status,
-        serviceAccountCount: ga.serviceAccounts.length,
+        serviceAccountCount: ga.serviceAccounts.filter((sa) =>
+          isActiveForHomeMetrics(sa.status),
+        ).length,
       })),
       metrics: {
         totalServiceAccounts: allServiceAccounts.length,
@@ -91,6 +132,7 @@ export class HomeService {
       serviceAccounts: allServiceAccounts.map((sa) => ({
         id: sa.id,
         sourceMailAccountId: sa.gmailAccountId,
+        sourceMailAccount: sa.sourceMailAccount,
         serviceName: sa.serviceName,
         displayName: sa.displayName ?? sa.serviceName,
         iconUrl: sa.iconUrl,
@@ -98,6 +140,7 @@ export class HomeService {
         riskLevel: sa.riskLevel,
         status: sa.status,
         primaryRiskType: sa.primaryRiskType,
+        evidenceCount: sa._count.riskEvidences,
       })),
       cardNews: CARD_NEWS,
     };
@@ -120,6 +163,10 @@ export class HomeService {
   }
 
   private riskLevelLabel(level: string): string {
-    return { high: '위험도 높음', medium: '위험도 중간', low: '주의', safe: '안전' }[level] ?? '';
+    return (
+      { high: '위험도 높음', medium: '위험도 중간', low: '주의', safe: '안전' }[
+        level
+      ] ?? ''
+    );
   }
 }
