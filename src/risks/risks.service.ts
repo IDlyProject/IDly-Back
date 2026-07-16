@@ -94,7 +94,7 @@ export class RisksService {
 
     return {
       serviceAccountId: updated.id,
-      status: body.status,
+      status: updated.status,
       resolvedAt: updated.resolvedAt?.toISOString() ?? null,
       homeDelta: { actionRequiredCount, securityScore },
     };

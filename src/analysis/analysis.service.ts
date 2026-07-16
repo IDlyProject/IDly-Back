@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
@@ -77,7 +77,12 @@ export class AnalysisService {
       where: { userId, status: { in: ['queued', 'scanning'] } },
     });
     if (running) {
-      throw new ConflictException({ analysisId: running.id, status: running.status });
+      return {
+        analysisId: running.id,
+        status: running.status as 'queued' | 'scanning',
+        targetMailAccounts: [],
+        message: STEP_MESSAGES[running.currentStep] ?? STEP_MESSAGES['waiting'],
+      };
     }
 
     const run = await this.prisma.analysisRun.create({
