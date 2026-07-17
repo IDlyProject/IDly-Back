@@ -87,6 +87,7 @@ export class UsersController {
 
 **응답 포함 정보**
 - \`id\`, \`name\`, \`phone\`, \`ageGroup\`, \`requiredTermsAgreed\`, \`requiredTermsAgreedAt\`, \`notificationAgreed\`, \`marketingAgreed\`
+- \`dormantAccountCount\`: 마이 화면의 숨긴 계정 수
 - \`gmailAccounts[]\`: 각 계정의 \`email\`, \`isPrimary\`, \`role\`, \`lastSyncedAt\`, 연결된 서비스 목록`,
   })
   @ApiResponse({

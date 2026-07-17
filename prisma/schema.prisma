@@ -97,6 +97,7 @@ model ServiceAccount {
 
   @@unique([gmailAccountId, serviceName])
   @@index([gmailAccountId, status])
+  @@index([gmailAccountId, status, dormantAt])
 }
 
 model RiskEvidence {

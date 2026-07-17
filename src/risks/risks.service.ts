@@ -5,6 +5,7 @@ import {
   countActionRequired,
   isActiveForHomeMetrics,
 } from '../common/domain/metrics';
+import { restoreAccountStatus } from '../common/domain/status';
 
 @Injectable()
 export class RisksService {
@@ -113,12 +114,16 @@ export class RisksService {
     });
     if (!sa) throw new NotFoundException('서비스를 찾을 수 없습니다.');
 
+    if (sa.status === 'dormant') {
+      return { serviceAccountId, status: 'dormant' };
+    }
+
     await this.prisma.serviceAccount.update({
       where: { id: serviceAccountId },
       data: {
         status: 'dormant',
         dormantAt: new Date(),
-        previousStatus: sa.status,
+        previousStatus: restoreAccountStatus(sa.status),
       },
     });
 
@@ -135,7 +140,7 @@ export class RisksService {
     });
     if (!sa) throw new NotFoundException('서비스를 찾을 수 없습니다.');
 
-    const restoredStatus = sa.previousStatus ?? 'safe';
+    const restoredStatus = restoreAccountStatus(sa.previousStatus);
 
     const updated = await this.prisma.serviceAccount.update({
       where: { id: serviceAccountId },

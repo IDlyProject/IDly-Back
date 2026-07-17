@@ -5,6 +5,7 @@ import {
   encryptToken,
   resolveEncryptionKey,
 } from '../common/crypto/token-crypto';
+import { restoreAccountStatus } from '../common/domain/status';
 
 @Injectable()
 export class UsersService {
@@ -134,6 +135,14 @@ export class UsersService {
         user
           ? {
               ...user,
+              dormantAccountCount: user.gmailAccounts.reduce(
+                (count, account) =>
+                  count +
+                  account.serviceAccounts.filter(
+                    (service) => service.status === 'dormant',
+                  ).length,
+                0,
+              ),
               gmailAccounts: user.gmailAccounts.map((account) => ({
                 ...account,
                 role: account.isPrimary
@@ -195,15 +204,15 @@ export class UsersService {
         dormantAt: true,
         gmailAccount: { select: { email: true } },
       },
-      orderBy: { dormantAt: 'desc' },
+      orderBy: [{ dormantAt: { sort: 'desc', nulls: 'last' } }],
     });
 
     return accounts.map((sa) => ({
       id: sa.id,
       serviceName: sa.serviceName,
-      displayName: sa.displayName,
+      displayName: sa.displayName ?? sa.serviceName,
       iconUrl: sa.iconUrl,
-      iconLabel: sa.iconLabel,
+      iconLabel: sa.iconLabel ?? sa.serviceName.charAt(0).toUpperCase(),
       email: sa.gmailAccount.email,
       dormantAt: sa.dormantAt?.toISOString() ?? null,
       dormantDuration: sa.dormantAt
@@ -218,12 +227,14 @@ export class UsersService {
       select: { id: true, previousStatus: true },
     });
 
-    await this.prisma.$transaction(
+    if (accounts.length === 0) return { restoredCount: 0 };
+
+    const results = await this.prisma.$transaction(
       accounts.map((sa) =>
-        this.prisma.serviceAccount.update({
-          where: { id: sa.id },
+        this.prisma.serviceAccount.updateMany({
+          where: { id: sa.id, status: 'dormant' },
           data: {
-            status: sa.previousStatus ?? 'safe',
+            status: restoreAccountStatus(sa.previousStatus),
             dormantAt: null,
             previousStatus: null,
           },
@@ -231,7 +242,9 @@ export class UsersService {
       ),
     );
 
-    return { restoredCount: accounts.length };
+    return {
+      restoredCount: results.reduce((sum, result) => sum + result.count, 0),
+    };
   }
 
   async getNotificationSettings(userId: string) {
@@ -259,9 +272,17 @@ export class UsersService {
       alertEventPromo?: boolean;
     },
   ) {
+    const data = Object.fromEntries(
+      Object.entries(dto).filter(([, value]) => value !== undefined),
+    );
+
+    if (Object.keys(data).length === 0) {
+      return this.getNotificationSettings(userId);
+    }
+
     return this.prisma.user.update({
       where: { id: userId },
-      data: dto,
+      data,
       select: {
         alertSuspiciousLogin: true,
         alertPasswordChange: true,
@@ -312,8 +333,12 @@ export class UsersService {
 function formatDormantDuration(dormantAt: Date): string {
   const now = new Date();
   const diffMs = now.getTime() - dormantAt.getTime();
-  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  const diffDays = Math.max(
+    0,
+    Math.floor(diffMs / (1000 * 60 * 60 * 24)),
+  );
 
+  if (diffDays < 1) return '오늘';
   if (diffDays < 30) return `${diffDays}일`;
   const months = Math.floor(diffDays / 30);
   if (months < 12) return `${months}개월`;
