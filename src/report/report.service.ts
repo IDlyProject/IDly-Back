@@ -48,6 +48,12 @@ export class ReportService {
       low: allAccounts.filter((a) => a.riskLevel === 'low').length,
       safe: allAccounts.filter((a) => a.riskLevel === 'safe').length,
     };
+    // UI 3카드(위험/주의/안전)용 집계 — low는 주의에 합산
+    const summaryCounts = {
+      danger: riskCounts.high,
+      caution: riskCounts.medium + riskCounts.low,
+      safe: riskCounts.safe,
+    };
 
     const services = allAccounts
       .filter((sa) => sa.riskLevel !== 'safe')
@@ -85,13 +91,37 @@ export class ReportService {
         };
       });
 
+    const riskEvents = allAccounts
+      .flatMap((sa) =>
+        sa.riskEvidences.map((e) => {
+          const snapshotEv = snapshot?.riskEvents?.find((ev) => ev.evidenceId === e.id);
+          return {
+            id: e.id,
+            serviceName: cleanServiceName(sa.serviceName),
+            title: snapshotEv?.title ?? e.subject ?? null,
+            description: snapshotEv?.description ?? e.summary ?? null,
+            riskType: e.riskType,
+            receivedAt: e.receivedAt?.toISOString() ?? null,
+          };
+        }),
+      )
+      .sort((a, b) => {
+        if (!a.receivedAt && !b.receivedAt) return 0;
+        if (!a.receivedAt) return 1;
+        if (!b.receivedAt) return -1;
+        return b.receivedAt.localeCompare(a.receivedAt);
+      })
+      .slice(0, 10);
+
     return {
       securityScore,
       grade: gradeLabel(securityScore),
       scoreDescription: snapshot?.scoreDescription ?? this.fallbackScoreDescription(securityScore),
       hasAiSnapshot: !!snapshot,
       riskCounts,
+      summaryCounts,
       analyzedAt: latestRun?.completedAt?.toISOString() ?? null,
+      riskEvents,
       services,
     };
   }

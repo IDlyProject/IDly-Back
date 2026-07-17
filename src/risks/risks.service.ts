@@ -98,11 +98,7 @@ export class RisksService {
       isActiveForHomeMetrics(a.status),
     );
 
-    // 조치 상태 변경 시 reportSnapshot 무효화 → 다음 GET /report는 룰 fallback 사용
-    await this.prisma.analysisRun.updateMany({
-      where: { userId, status: 'completed' },
-      data: { reportSnapshot: Prisma.DbNull },
-    });
+    await this.invalidateSnapshot(userId);
 
     return {
       serviceAccountId: updated.id,
@@ -134,6 +130,8 @@ export class RisksService {
       },
     });
 
+    await this.invalidateSnapshot(userId);
+
     return { serviceAccountId, status: 'dormant' };
   }
 
@@ -158,7 +156,16 @@ export class RisksService {
       },
     });
 
+    await this.invalidateSnapshot(userId);
+
     return { serviceAccountId: updated.id, status: updated.status };
+  }
+
+  private async invalidateSnapshot(userId: string) {
+    await this.prisma.analysisRun.updateMany({
+      where: { userId, status: 'completed' },
+      data: { reportSnapshot: Prisma.DbNull },
+    });
   }
 
   private nextStatus(

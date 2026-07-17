@@ -98,7 +98,7 @@ export class SolarService {
       .join('\n');
 
     const evidenceList = evidences
-      .slice(0, 10)
+      .slice(0, 12)
       .map(
         (e) =>
           `- evidenceId: ${e.id}\n  serviceAccountId: ${e.serviceAccountId}\n  제목: ${e.subject ?? '없음'}\n  요약: ${e.summary ?? '없음'}`,

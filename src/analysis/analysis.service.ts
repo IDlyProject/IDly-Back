@@ -12,6 +12,7 @@ import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
 import FormData from 'form-data';
 import { createHash } from 'crypto';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { GmailService } from '../gmail/gmail.service';
 import { resolveService } from '../common/registry/service-registry';
@@ -360,10 +361,11 @@ export class AnalysisService implements OnModuleInit {
 
     if (!snapshot) return;
 
-    await this.prisma.analysisRun.update({
-      where: { id: runId },
+    // reportSnapshot이 이미 null인 run에만 patch — 조치 무효화 이후 stale 복귀 방지
+    await this.prisma.analysisRun.updateMany({
+      where: { id: runId, reportSnapshot: { equals: Prisma.DbNull } },
       data: {
-        reportSnapshot: snapshot as unknown as import('@prisma/client').Prisma.InputJsonValue,
+        reportSnapshot: snapshot as unknown as Prisma.InputJsonValue,
       },
     });
   }
