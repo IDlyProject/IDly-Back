@@ -71,7 +71,10 @@ export class SolarService {
         ),
       );
 
-      const raw = JSON.parse(data.choices[0].message.content) as ReportSnapshot;
+      const content = data.choices?.[0]?.message?.content;
+      if (!content) return null;
+      const cleaned = content.replace(/^```json\s*/i, '').replace(/```\s*$/, '').trim();
+      const raw = JSON.parse(cleaned) as ReportSnapshot;
       return this.validate(raw, input, evidences);
     } catch (err) {
       this.logger.error('Solar 리포트 생성 실패', (err as Error).message);
@@ -138,26 +141,25 @@ ${evidenceList || '없음'}
     raw: any,
     input: ReportSnapshotInput,
     evidences: { id: string }[],
-  ): ReportSnapshot {
+  ): ReportSnapshot | null {
     const validSaIds = new Set(input.services.map((s) => s.serviceAccountId));
     const validEvidenceIds = new Set(evidences.map((e) => e.id));
 
-    return {
-      scoreDescription: typeof raw.scoreDescription === 'string' ? raw.scoreDescription : '',
-      recommendations: (raw.recommendations ?? [])
-        .filter((r: any) => validSaIds.has(r.serviceAccountId))
-        .map((r: any) => ({
-          serviceAccountId: r.serviceAccountId,
-          headline: r.headline ?? '',
-          reason: r.reason ?? '',
-        })),
-      riskEvents: (raw.riskEvents ?? [])
-        .filter((e: any) => validEvidenceIds.has(e.evidenceId))
-        .map((e: any) => ({
-          evidenceId: e.evidenceId,
-          title: e.title ?? '',
-          description: e.description ?? '',
-        })),
-    };
+    const scoreDescription = typeof raw.scoreDescription === 'string' ? raw.scoreDescription.trim() : '';
+    if (!scoreDescription) return null;
+
+    const seenSaIds = new Set<string>();
+    const recommendations = (raw.recommendations ?? [])
+      .filter((r: any) => validSaIds.has(r.serviceAccountId) && !seenSaIds.has(r.serviceAccountId))
+      .map((r: any) => {
+        seenSaIds.add(r.serviceAccountId);
+        return { serviceAccountId: r.serviceAccountId, headline: r.headline ?? '', reason: r.reason ?? '' };
+      });
+
+    const riskEvents = (raw.riskEvents ?? [])
+      .filter((e: any) => validEvidenceIds.has(e.evidenceId))
+      .map((e: any) => ({ evidenceId: e.evidenceId, title: e.title ?? '', description: e.description ?? '' }));
+
+    return { scoreDescription, recommendations, riskEvents };
   }
 }

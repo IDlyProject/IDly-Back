@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   computeSecurityScore,
@@ -96,6 +97,12 @@ export class RisksService {
     const activeAccounts = allAccounts.filter((a) =>
       isActiveForHomeMetrics(a.status),
     );
+
+    // 조치 상태 변경 시 reportSnapshot 무효화 → 다음 GET /report는 룰 fallback 사용
+    await this.prisma.analysisRun.updateMany({
+      where: { userId, status: 'completed' },
+      data: { reportSnapshot: Prisma.DbNull },
+    });
 
     return {
       serviceAccountId: updated.id,

@@ -12,16 +12,13 @@ export class SummaryController {
 
   @Get()
   @ApiOperation({
-    summary: '월별 보안 정리 — 이번 달 위험 서비스 목록',
-    description: `이번 달 기준으로 위험도가 있는 서비스 계정 목록을 위험도순으로 반환합니다.
-
-**정렬 기준**: high → medium → low → safe 순
+    summary: '이번 달 보안 조치 현황 — 완료/진행중/대기 집계 + 서비스별 체크리스트',
+    description: `조치 항목(ActionItem) 기준 이번 달 보안 조치 트래커를 반환합니다.
 
 **포함 항목**
 - \`month\`: 조회 기준 연월 (YYYY-MM)
-- \`securityScore\`: 전체 보안 점수 (0–100)
-- \`totalServices\` / \`riskyServices\`: 전체 / 위험 서비스 수
-- \`accounts[]\`: 서비스별 요약. 이번 달 위험 근거 메일(\`recentEvidences\`), 필수 조치 여부(\`hasRequiredAction\`) 포함`,
+- \`progress\`: 전체 조치 집계 \`{ done, inProgress, pending }\`
+- \`services[]\`: 조치 항목이 있는 서비스 목록. 서비스별 \`actions[]\`에 각 항목의 \`status\`·\`updatedAt\` 포함`,
   })
   @ApiResponse({ status: 200, description: '월별 보안 정리 데이터' })
   getSummary(@Req() req) {

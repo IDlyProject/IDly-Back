@@ -1,8 +1,16 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { computeSecurityScore, isActiveForHomeMetrics } from '../common/domain/metrics';
+import { computeSecurityScore } from '../common/domain/metrics';
 import { ReportSnapshot } from '../common/solar/solar.service';
 import { cleanServiceName } from '../common/registry/service-registry';
+
+const RISK_ORDER: Record<string, number> = { high: 0, medium: 1, low: 2, safe: 3 };
+
+function gradeLabel(score: number): '위험' | '주의' | '양호' {
+  if (score >= 80) return '양호';
+  if (score >= 60) return '주의';
+  return '위험';
+}
 
 @Injectable()
 export class ReportService {
@@ -18,6 +26,7 @@ export class ReportService {
       where: { userId },
       include: {
         serviceAccounts: {
+          where: { status: { notIn: ['dormant', 'skipped'] } },
           include: {
             riskEvidences: { orderBy: { receivedAt: 'desc' }, take: 5 },
             actionItems: { orderBy: { order: 'asc' } },
@@ -30,21 +39,21 @@ export class ReportService {
       ga.serviceAccounts.map((sa) => ({ ...sa, gmailEmail: ga.email, gmailLabel: ga.label })),
     );
 
-    const activeAccounts = allAccounts.filter((sa) => isActiveForHomeMetrics(sa.status));
-    const securityScore = computeSecurityScore(activeAccounts);
+    const securityScore = computeSecurityScore(allAccounts);
+    const snapshot = (latestRun?.reportSnapshot ?? null) as ReportSnapshot | null;
 
-    const snapshot = latestRun?.reportSnapshot as ReportSnapshot | null;
+    const riskCounts = {
+      high: allAccounts.filter((a) => a.riskLevel === 'high').length,
+      medium: allAccounts.filter((a) => a.riskLevel === 'medium').length,
+      low: allAccounts.filter((a) => a.riskLevel === 'low').length,
+      safe: allAccounts.filter((a) => a.riskLevel === 'safe').length,
+    };
 
-    const services = activeAccounts
+    const services = allAccounts
       .filter((sa) => sa.riskLevel !== 'safe')
-      .sort((a, b) => {
-        const order: Record<string, number> = { high: 0, medium: 1, low: 2 };
-        return (order[a.riskLevel] ?? 3) - (order[b.riskLevel] ?? 3);
-      })
+      .sort((a, b) => (RISK_ORDER[a.riskLevel] ?? 3) - (RISK_ORDER[b.riskLevel] ?? 3))
       .map((sa) => {
-        const snapshotRec = snapshot?.recommendations?.find(
-          (r) => r.serviceAccountId === sa.id,
-        );
+        const snapshotRec = snapshot?.recommendations?.find((r) => r.serviceAccountId === sa.id);
         return {
           id: sa.id,
           serviceName: cleanServiceName(sa.serviceName),
@@ -78,17 +87,19 @@ export class ReportService {
 
     return {
       securityScore,
-      scoreDescription:
-        snapshot?.scoreDescription ?? this.fallbackScoreDescription(securityScore),
+      grade: gradeLabel(securityScore),
+      scoreDescription: snapshot?.scoreDescription ?? this.fallbackScoreDescription(securityScore),
+      hasAiSnapshot: !!snapshot,
+      riskCounts,
       analyzedAt: latestRun?.completedAt?.toISOString() ?? null,
       services,
     };
   }
 
   private fallbackScoreDescription(score: number): string {
-    if (score >= 90) return '전반적으로 안전한 상태예요.';
-    if (score >= 70) return '일부 계정을 확인해 보세요.';
-    if (score >= 50) return '몇 가지 조치가 필요해요.';
+    if (score >= 80) return '전반적으로 안전한 상태예요.';
+    if (score >= 60) return '일부 계정을 확인해 보세요.';
+    if (score >= 40) return '몇 가지 조치가 필요해요.';
     return '즉각적인 조치가 필요한 계정이 있어요.';
   }
 }
