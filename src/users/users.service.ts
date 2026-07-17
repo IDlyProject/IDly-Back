@@ -5,6 +5,7 @@ import {
   encryptToken,
   resolveEncryptionKey,
 } from '../common/crypto/token-crypto';
+import { restoreAccountStatus } from '../common/domain/status';
 
 @Injectable()
 export class UsersService {
@@ -134,6 +135,14 @@ export class UsersService {
         user
           ? {
               ...user,
+              dormantAccountCount: user.gmailAccounts.reduce(
+                (count, account) =>
+                  count +
+                  account.serviceAccounts.filter(
+                    (service) => service.status === 'dormant',
+                  ).length,
+                0,
+              ),
               gmailAccounts: user.gmailAccounts.map((account) => ({
                 ...account,
                 role: account.isPrimary
@@ -183,6 +192,112 @@ export class UsersService {
     return this.prisma.user.update({ where: { id: userId }, data: dto });
   }
 
+  async getDormantAccounts(userId: string) {
+    const accounts = await this.prisma.serviceAccount.findMany({
+      where: { status: 'dormant', gmailAccount: { userId } },
+      select: {
+        id: true,
+        serviceName: true,
+        displayName: true,
+        iconUrl: true,
+        iconLabel: true,
+        dormantAt: true,
+        gmailAccount: { select: { email: true } },
+      },
+      orderBy: [{ dormantAt: { sort: 'desc', nulls: 'last' } }],
+    });
+
+    return accounts.map((sa) => ({
+      id: sa.id,
+      serviceName: sa.serviceName,
+      displayName: sa.displayName ?? sa.serviceName,
+      iconUrl: sa.iconUrl,
+      iconLabel: sa.iconLabel ?? sa.serviceName.charAt(0).toUpperCase(),
+      email: sa.gmailAccount.email,
+      dormantAt: sa.dormantAt?.toISOString() ?? null,
+      dormantDuration: sa.dormantAt
+        ? formatDormantDuration(sa.dormantAt)
+        : null,
+    }));
+  }
+
+  async restoreAllDormant(userId: string) {
+    const accounts = await this.prisma.serviceAccount.findMany({
+      where: { status: 'dormant', gmailAccount: { userId } },
+      select: { id: true, previousStatus: true },
+    });
+
+    if (accounts.length === 0) return { restoredCount: 0 };
+
+    const results = await this.prisma.$transaction(
+      accounts.map((sa) =>
+        this.prisma.serviceAccount.updateMany({
+          where: { id: sa.id, status: 'dormant' },
+          data: {
+            status: restoreAccountStatus(sa.previousStatus),
+            dormantAt: null,
+            previousStatus: null,
+          },
+        }),
+      ),
+    );
+
+    return {
+      restoredCount: results.reduce((sum, result) => sum + result.count, 0),
+    };
+  }
+
+  async getNotificationSettings(userId: string) {
+    return this.prisma.user.findUniqueOrThrow({
+      where: { id: userId },
+      select: {
+        alertSuspiciousLogin: true,
+        alertPasswordChange: true,
+        alertNewDevice: true,
+        alertRecoveryEmail: true,
+        alertSecurityTip: true,
+        alertEventPromo: true,
+      },
+    });
+  }
+
+  async updateNotificationSettings(
+    userId: string,
+    dto: {
+      alertSuspiciousLogin?: boolean;
+      alertPasswordChange?: boolean;
+      alertNewDevice?: boolean;
+      alertRecoveryEmail?: boolean;
+      alertSecurityTip?: boolean;
+      alertEventPromo?: boolean;
+    },
+  ) {
+    const data = Object.fromEntries(
+      Object.entries(dto).filter(([, value]) => value !== undefined),
+    );
+
+    if (Object.keys(data).length === 0) {
+      return this.getNotificationSettings(userId);
+    }
+
+    if (dto.alertSecurityTip === true || dto.alertEventPromo === true) {
+      data.marketingAgreed = true;
+    }
+
+    return this.prisma.user.update({
+      where: { id: userId },
+      data,
+      select: {
+        alertSuspiciousLogin: true,
+        alertPasswordChange: true,
+        alertNewDevice: true,
+        alertRecoveryEmail: true,
+        alertSecurityTip: true,
+        alertEventPromo: true,
+      },
+    });
+  }
+
   async saveConsent(
     userId: string,
     dto: {
@@ -217,4 +332,20 @@ export class UsersService {
       },
     });
   }
+}
+
+function formatDormantDuration(dormantAt: Date): string {
+  const now = new Date();
+  const diffMs = now.getTime() - dormantAt.getTime();
+  const diffDays = Math.max(
+    0,
+    Math.floor(diffMs / (1000 * 60 * 60 * 24)),
+  );
+
+  if (diffDays < 1) return '오늘';
+  if (diffDays < 30) return `${diffDays}일`;
+  const months = Math.floor(diffDays / 30);
+  if (months < 12) return `${months}개월`;
+  const years = Math.floor(months / 12);
+  return `${years}년`;
 }

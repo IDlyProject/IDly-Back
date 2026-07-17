@@ -2,6 +2,8 @@
  * Mirrors AnalysisService.nextStatus / RisksService.nextStatus rules for regression.
  */
 
+import { restoreAccountStatus } from './status';
+
 type AccountStatus =
   | 'action_required'
   | 'watch'
@@ -59,5 +61,12 @@ describe('status transitions', () => {
     expect(nextUserActionStatus('pending', 'high')).toBe('action_required');
     expect(nextUserActionStatus('pending', 'low')).toBe('watch');
     expect(nextUserActionStatus('pending', 'safe')).toBe('safe');
+  });
+
+  it('never restores to dormant or unknown status', () => {
+    expect(restoreAccountStatus('watch')).toBe('watch');
+    expect(restoreAccountStatus('dormant')).toBe('safe');
+    expect(restoreAccountStatus('bad-status')).toBe('safe');
+    expect(restoreAccountStatus(null)).toBe('safe');
   });
 });
