@@ -280,6 +280,10 @@ export class UsersService {
       return this.getNotificationSettings(userId);
     }
 
+    if (dto.alertSecurityTip === true || dto.alertEventPromo === true) {
+      data.marketingAgreed = true;
+    }
+
     return this.prisma.user.update({
       where: { id: userId },
       data,

@@ -155,6 +155,12 @@ export class UsersController {
     summary: '알림 설정 조회',
     description: `보안 알림 4종과 마케팅 알림 2종의 현재 설정값을 반환합니다.
 
+**정책**
+- 보안 알림은 개별 보안 토글 4종이 실제 발송 기준입니다.
+- \`notificationAgreed\`는 온보딩 최초 수신 동의 기록으로 유지합니다.
+- 마케팅 알림 발송은 \`marketingAgreed === true\` 이면서 해당 개별 마케팅 토글이 \`true\`일 때만 가능합니다.
+- 개별 마케팅 토글을 \`true\`로 변경하면 \`marketingAgreed\`도 자동으로 \`true\`로 승격됩니다.
+
 **보안 알림**
 - \`alertSuspiciousLogin\`: 의심 로그인 감지
 - \`alertPasswordChange\`: 비밀번호 변경 알림
@@ -187,7 +193,10 @@ export class UsersController {
   @ApiTags('4-1. 마이 화면')
   @ApiOperation({
     summary: '알림 설정 변경',
-    description: '변경할 항목만 포함해서 보내면 됩니다 (partial update).',
+    description: `변경할 항목만 포함해서 보내면 됩니다 (partial update).
+
+보안 알림은 개별 보안 토글이 실제 발송 기준입니다.
+마케팅 알림은 \`marketingAgreed\` 상위 동의가 필요하며, \`alertSecurityTip\` 또는 \`alertEventPromo\`를 \`true\`로 변경하면 \`marketingAgreed\`도 자동으로 \`true\`가 됩니다.`,
   })
   @ApiResponse({
     status: 200,
