@@ -3,3 +3,4 @@ ALTER TABLE "User" ADD COLUMN "lastLoginAt" TIMESTAMP(3);
 ALTER TABLE "User" ADD COLUMN "scheduledDeleteAt" TIMESTAMP(3);
 ALTER TABLE "User" ADD COLUMN "deleteReason" TEXT;
 ALTER TABLE "User" ADD COLUMN "deleteReasonDetail" TEXT;
+ALTER TABLE "User" ADD COLUMN "tokenInvalidatedAt" TIMESTAMP(3);

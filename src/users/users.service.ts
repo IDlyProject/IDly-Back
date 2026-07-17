@@ -150,9 +150,7 @@ export class UsersService {
                   ).length,
                 0,
               ),
-              connectedAccountCount: user.gmailAccounts.filter(
-                (a) => !a.isPrimary,
-              ).length,
+              connectedAccountCount: user.gmailAccounts.length,
               gmailAccounts: user.gmailAccounts.map((account) => ({
                 ...account,
                 role: account.isPrimary
@@ -181,6 +179,9 @@ export class UsersService {
     }
 
     await this.prisma.gmailAccount.delete({ where: { id: accountId } });
+
+    const remaining = await this.prisma.gmailAccount.count({ where: { userId } });
+    return { disconnectedAccountId: accountId, connectedAccountCount: remaining };
   }
 
   async scheduleDelete(
@@ -196,10 +197,11 @@ export class UsersService {
       data: {
         scheduledDeleteAt,
         deleteReason: dto.reason,
-        deleteReasonDetail: dto.reasonDetail ?? null,
+        deleteReasonDetail: dto.reason === 'other' ? (dto.reasonDetail ?? null) : null,
+        tokenInvalidatedAt: new Date(),
       },
       select: { id: true, scheduledDeleteAt: true },
-    });
+    }).then((user) => ({ ...user, gracePeriodDays: DAYS_UNTIL_DELETE }));
   }
 
   async updateLastLogin(userId: string) {

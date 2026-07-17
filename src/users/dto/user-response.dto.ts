@@ -89,7 +89,7 @@ export class UserDto {
   @ApiProperty({ example: 3 })
   dormantAccountCount: number;
 
-  @ApiProperty({ example: 3 })
+  @ApiProperty({ example: 4, description: '연동된 Gmail 계정 총 수 (대표 포함)' })
   connectedAccountCount: number;
 
   @ApiProperty({ type: [GmailAccountDto] })

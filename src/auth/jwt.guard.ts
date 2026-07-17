@@ -8,15 +8,17 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { Request } from 'express';
+import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class JwtGuard implements CanActivate {
   constructor(
     private readonly jwtService: JwtService,
     private readonly config: ConfigService,
+    private readonly prisma: PrismaService,
   ) {}
 
-  canActivate(context: ExecutionContext): boolean {
+  async canActivate(context: ExecutionContext): Promise<boolean> {
     const req = context.switchToHttp().getRequest<Request>();
     const authHeader = req.headers.authorization;
 
@@ -34,11 +36,27 @@ export class JwtGuard implements CanActivate {
       this.assertTrustedBrowserOrigin(req);
     }
 
+    let payload: { sub: string; iat?: number };
     try {
-      req['user'] = this.jwtService.verify(token);
+      payload = this.jwtService.verify(token);
     } catch {
       throw new UnauthorizedException('유효하지 않은 토큰입니다.');
     }
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: payload.sub },
+      select: { tokenInvalidatedAt: true },
+    });
+
+    if (
+      user?.tokenInvalidatedAt &&
+      payload.iat !== undefined &&
+      new Date(payload.iat * 1000) < user.tokenInvalidatedAt
+    ) {
+      throw new UnauthorizedException('만료된 토큰입니다. 다시 로그인해 주세요.');
+    }
+
+    req['user'] = payload;
     return true;
   }
 

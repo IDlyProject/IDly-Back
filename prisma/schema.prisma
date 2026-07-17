@@ -30,6 +30,7 @@ model User {
   scheduledDeleteAt     DateTime?
   deleteReason          String?
   deleteReasonDetail    String?
+  tokenInvalidatedAt    DateTime?
   createdAt             DateTime  @default(now())
 
   gmailAccounts GmailAccount[]

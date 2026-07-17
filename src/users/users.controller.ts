@@ -249,6 +249,7 @@ export class UsersController {
       example: {
         id: 'user-uuid',
         scheduledDeleteAt: '2026-08-17T00:00:00.000Z',
+        gracePeriodDays: 30,
       },
     },
   })
@@ -267,13 +268,18 @@ export class UsersController {
 - 본인 소유가 아닌 계정이면 → 404
 - 해제 시 해당 Gmail로 분석된 서비스 계정 데이터도 함께 삭제됩니다 (Cascade)`,
   })
-  @ApiResponse({ status: 200, description: '연동 해제 완료' })
+  @ApiResponse({
+    status: 200,
+    description: '연동 해제 완료',
+    schema: {
+      example: { disconnectedAccountId: 'gmail-uuid', connectedAccountCount: 2 },
+    },
+  })
   async disconnectAccount(
     @Req() req,
     @Param('accountId') accountId: string,
   ) {
-    await this.usersService.disconnectAccount(req.user.sub, accountId);
-    return { message: '연동이 해제되었습니다.' };
+    return this.usersService.disconnectAccount(req.user.sub, accountId);
   }
 
   @Get('me/accounts')
