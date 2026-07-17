@@ -123,7 +123,7 @@ export const SERVICE_REGISTRY: ServiceRegistryItem[] = [
 
 const CLEARBIT_BASE = 'https://logo.clearbit.com';
 
-function cleanServiceName(raw: string): string {
+export function cleanServiceName(raw: string): string {
   // "Name | Description <email@domain>" → "Name"
   const pipeClean = raw.split('|')[0].trim();
   // "<email@domain>" or "email@domain" → extract domain

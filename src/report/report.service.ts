@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { computeSecurityScore, isActiveForHomeMetrics } from '../common/domain/metrics';
 import { ReportSnapshot } from '../common/solar/solar.service';
+import { cleanServiceName } from '../common/registry/service-registry';
 
 @Injectable()
 export class ReportService {
@@ -46,9 +47,9 @@ export class ReportService {
         );
         return {
           id: sa.id,
-          serviceName: sa.serviceName,
+          serviceName: cleanServiceName(sa.serviceName),
           iconUrl: sa.iconUrl ?? null,
-          iconLabel: sa.iconLabel ?? sa.serviceName[0]?.toUpperCase() ?? '?',
+          iconLabel: sa.iconLabel ?? cleanServiceName(sa.serviceName)[0]?.toUpperCase() ?? '?',
           riskLevel: sa.riskLevel,
           status: sa.status,
           primaryRiskType: sa.primaryRiskType ?? null,
