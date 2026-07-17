@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   computeSecurityScore,
@@ -97,6 +98,8 @@ export class RisksService {
       isActiveForHomeMetrics(a.status),
     );
 
+    await this.invalidateSnapshot(userId);
+
     return {
       serviceAccountId: updated.id,
       status: updated.status,
@@ -127,6 +130,8 @@ export class RisksService {
       },
     });
 
+    await this.invalidateSnapshot(userId);
+
     return { serviceAccountId, status: 'dormant' };
   }
 
@@ -151,7 +156,17 @@ export class RisksService {
       },
     });
 
+    await this.invalidateSnapshot(userId);
+
     return { serviceAccountId: updated.id, status: updated.status };
+  }
+
+  private async invalidateSnapshot(userId: string) {
+    // DbNull 대신 sentinel JSON 사용 — Solar의 DbNull 조건부 patch와 구분하기 위함
+    await this.prisma.analysisRun.updateMany({
+      where: { userId, status: 'completed' },
+      data: { reportSnapshot: { status: 'invalidated' } as unknown as Prisma.InputJsonValue },
+    });
   }
 
   private nextStatus(
