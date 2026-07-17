@@ -16,6 +16,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { GmailService } from '../gmail/gmail.service';
 import { resolveService } from '../common/registry/service-registry';
 import { ANALYSIS_ORPHAN_TTL_MS } from '../common/domain/status';
+import { SolarService } from '../common/solar/solar.service';
 import type { AccountStatus, RiskLevel } from '../common/domain/status';
 
 type AiSecurityLevel = '위험' | '주의' | '양호';
@@ -74,6 +75,7 @@ export class AnalysisService implements OnModuleInit {
     private readonly gmailService: GmailService,
     private readonly httpService: HttpService,
     private readonly config: ConfigService,
+    private readonly solarService: SolarService,
   ) {}
 
   async onModuleInit() {
@@ -267,6 +269,8 @@ export class AnalysisService implements OnModuleInit {
         return;
       }
 
+      const reportSnapshot = await this.buildReportSnapshot(userId);
+
       await this.prisma.analysisRun.update({
         where: { id: runId },
         data: {
@@ -275,7 +279,7 @@ export class AnalysisService implements OnModuleInit {
           currentStep: 'completed',
           displayMessage: STEP_MESSAGES['completed'],
           completedAt: new Date(),
-          // Surface partial failures without failing the whole run
+          reportSnapshot: reportSnapshot ? (reportSnapshot as unknown as import('@prisma/client').Prisma.InputJsonValue) : undefined,
           failedReason:
             partialErrors.length > 0
               ? `partial_errors: ${partialErrors.slice(0, 5).join('; ')}`
@@ -299,6 +303,54 @@ export class AnalysisService implements OnModuleInit {
     }
     if (error instanceof Error) return error.message.slice(0, 300);
     return 'unknown_error';
+  }
+
+  private async buildReportSnapshot(userId: string) {
+    const gmailAccounts = await this.prisma.gmailAccount.findMany({
+      where: { userId },
+      include: {
+        serviceAccounts: {
+          where: { status: { notIn: ['dormant', 'skipped'] } },
+          include: {
+            riskEvidences: { select: { id: true, subject: true, summary: true, riskType: true }, take: 3 },
+          },
+        },
+      },
+    });
+
+    const serviceAccounts = gmailAccounts.flatMap((ga) => ga.serviceAccounts);
+    const evidences = serviceAccounts.flatMap((sa) =>
+      sa.riskEvidences.map((e) => ({ ...e, serviceAccountId: sa.id })),
+    );
+
+    const activeServices = serviceAccounts.filter((sa) => sa.riskLevel !== 'safe');
+    if (activeServices.length === 0) return null;
+
+    const score = this.computeScore(serviceAccounts);
+
+    return this.solarService.generateReportSnapshot(
+      {
+        securityScore: score,
+        services: activeServices.map((sa) => ({
+          serviceAccountId: sa.id,
+          serviceName: sa.serviceName,
+          riskLevel: sa.riskLevel,
+          primaryRiskType: sa.primaryRiskType,
+          interpretation: sa.interpretation,
+          evidenceSubjects: sa.riskEvidences.map((e) => e.subject ?? '').filter(Boolean),
+        })),
+      },
+      evidences,
+    );
+  }
+
+  private computeScore(accounts: { riskLevel: string; status: string }[]): number {
+    const active = accounts.filter((a) => !['dormant', 'skipped'].includes(a.status));
+    if (active.length === 0) return 100;
+    const penalty = active.reduce((sum, a) => {
+      return sum + ({ high: 30, medium: 15, low: 5, safe: 0 }[a.riskLevel] ?? 0);
+    }, 0);
+    return Math.max(0, Math.min(100, 100 - Math.round(penalty / active.length)));
   }
 
   private async markFailed(runId: string, reason: string) {

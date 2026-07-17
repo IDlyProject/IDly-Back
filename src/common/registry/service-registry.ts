@@ -123,6 +123,20 @@ export const SERVICE_REGISTRY: ServiceRegistryItem[] = [
 
 const CLEARBIT_BASE = 'https://logo.clearbit.com';
 
+function cleanServiceName(raw: string): string {
+  // "Name | Description <email@domain>" → "Name"
+  const pipeClean = raw.split('|')[0].trim();
+  // "<email@domain>" or "email@domain" → extract domain
+  const angleMatch = pipeClean.match(/^<([^>]+)>$/);
+  if (angleMatch) {
+    const inner = angleMatch[1];
+    const domain = inner.split('@')[1];
+    return domain ? domain.split('.')[0] : inner;
+  }
+  // Remove trailing <email> if present
+  return pipeClean.replace(/\s*<[^>]+>\s*$/, '').trim() || raw;
+}
+
 export function resolveService(...candidates: (string | null | undefined)[]): {
   serviceName: string;
   iconUrl: string | null;
@@ -151,7 +165,7 @@ export function resolveService(...candidates: (string | null | undefined)[]): {
     };
   }
 
-  const fallbackName = texts[0] ?? 'Unknown';
+  const fallbackName = cleanServiceName(texts[0] ?? 'Unknown');
   const label = fallbackName.charAt(0).toUpperCase() || '?';
   return {
     serviceName: fallbackName,

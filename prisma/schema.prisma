@@ -66,9 +66,10 @@ model AnalysisRun {
   progress       Int       @default(0)
   currentStep    String    @default("waiting") // waiting | checking_connected_mail | collecting_account_signals | preparing_home | completed | failed
   displayMessage String?
-  failedReason   String?
-  startedAt      DateTime  @default(now())
-  completedAt    DateTime?
+  failedReason    String?
+  reportSnapshot  Json?
+  startedAt       DateTime  @default(now())
+  completedAt     DateTime?
 
   user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   serviceAccounts ServiceAccount[]

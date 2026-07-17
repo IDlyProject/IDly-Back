@@ -8,6 +8,8 @@ import { AnalysisModule } from './analysis/analysis.module';
 import { BetaModule } from './beta/beta.module';
 import { HomeModule } from './home/home.module';
 import { RisksModule } from './risks/risks.module';
+import { SummaryModule } from './summary/summary.module';
+import { ReportModule } from './report/report.module';
 import { HealthController } from './health.controller';
 
 @Module({
@@ -21,6 +23,8 @@ import { HealthController } from './health.controller';
     BetaModule,
     HomeModule,
     RisksModule,
+    SummaryModule,
+    ReportModule,
   ],
   controllers: [HealthController],
 })
