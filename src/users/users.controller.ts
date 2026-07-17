@@ -1,8 +1,10 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
+  Param,
   Patch,
   Post,
   Req,
@@ -24,6 +26,7 @@ import {
   UserDto,
   UserProfileDto,
 } from './dto/user-response.dto';
+import { DeleteAccountDto } from './dto/delete-account.dto';
 
 @ApiBearerAuth('access-token')
 @Controller('users')
@@ -78,15 +81,18 @@ export class UsersController {
   }
 
   @Get('me')
-  @ApiTags('1-2. 회원가입', '4-1. 마이 화면')
+  @ApiTags('1-2. 회원가입', '4-1. 마이 화면', '4-2. 계정 관리')
   @ApiOperation({
     summary: '내 프로필 조회',
     description: `로그인한 유저의 프로필과 연결된 Gmail 계정 목록을 반환합니다.
 
-온보딩 대표 계정 확인(1-2)과 마이 화면(4-1)에서 함께 사용됩니다.
+온보딩 대표 계정 확인(1-2), 마이 화면(4-1), 계정 관리(4-2)에서 함께 사용됩니다.
 
 **응답 포함 정보**
 - \`id\`, \`name\`, \`phone\`, \`ageGroup\`, \`requiredTermsAgreed\`, \`requiredTermsAgreedAt\`, \`notificationAgreed\`, \`marketingAgreed\`
+- \`createdAt\`: 가입일 (계정 관리 화면 계정 정보 섹션)
+- \`lastLoginAt\`: 마지막 로그인 일시 (계정 관리 화면 계정 정보 섹션)
+- \`connectedAccountCount\`: 연동된 Gmail 계정 총 수 (대표 포함, 계정 관리 화면 계정 정보 섹션)
 - \`dormantAccountCount\`: 마이 화면의 숨긴 계정 수
 - \`gmailAccounts[]\`: 각 계정의 \`email\`, \`isPrimary\`, \`role\`, \`lastSyncedAt\`, 연결된 서비스 목록`,
   })
@@ -217,6 +223,59 @@ export class UsersController {
     @Body() body: UpdateNotificationSettingsDto,
   ) {
     return this.usersService.updateNotificationSettings(req.user.sub, body);
+  }
+
+  @Delete('me')
+  @HttpCode(200)
+  @ApiTags('4-2. 계정 관리', '4-3. 탈퇴')
+  @ApiOperation({
+    summary: '회원 탈퇴',
+    description: `회원 계정과 연결된 Gmail/서비스 이용 기록을 즉시 영구 삭제합니다.
+
+탈퇴 사유는 사용자 식별 정보 없이 \`WithdrawalLog\`에 별도 저장합니다.
+
+**탈퇴 사유 선택지 (4-3-2 화면)**
+- \`not_frequent\`: 자주 이용하지 않아요
+- \`frequent_errors\`: 오류가 자주 발생해요
+- \`inconvenient\`: 기능이 편리하지 않아요
+- \`other\`: 기타 — \`reasonDetail\` 필수`,
+  })
+  @ApiResponse({
+    status: 200,
+    description: '회원 탈퇴 완료',
+    schema: {
+      example: {
+        deleted: true,
+      },
+    },
+  })
+  async deleteMe(@Req() req, @Body() body: DeleteAccountDto) {
+    return this.usersService.deleteAccount(req.user.sub, body);
+  }
+
+  @Delete('me/accounts/:accountId')
+  @HttpCode(200)
+  @ApiTags('4-2. 계정 관리')
+  @ApiOperation({
+    summary: '연동 Gmail 계정 해제',
+    description: `연동된 Gmail 계정을 해제합니다.
+
+- 대표 계정(isPrimary=true)은 해제할 수 없습니다 → 400
+- 본인 소유가 아닌 계정이면 → 404
+- 해제 시 해당 Gmail로 분석된 서비스 계정 데이터도 함께 삭제됩니다 (Cascade)`,
+  })
+  @ApiResponse({
+    status: 200,
+    description: '연동 해제 완료',
+    schema: {
+      example: {
+        disconnectedAccountId: 'gmail-uuid',
+        connectedAccountCount: 2,
+      },
+    },
+  })
+  async disconnectAccount(@Req() req, @Param('accountId') accountId: string) {
+    return this.usersService.disconnectAccount(req.user.sub, accountId);
   }
 
   @Get('me/accounts')

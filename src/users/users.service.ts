@@ -1,4 +1,9 @@
-import { ConflictException, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -108,6 +113,7 @@ export class UsersService {
           notificationAgreed: true,
           marketingAgreed: true,
           createdAt: true,
+          lastLoginAt: true,
           gmailAccounts: {
             select: {
               id: true,
@@ -143,6 +149,7 @@ export class UsersService {
                   ).length,
                 0,
               ),
+              connectedAccountCount: user.gmailAccounts.length,
               gmailAccounts: user.gmailAccounts.map((account) => ({
                 ...account,
                 role: account.isPrimary
@@ -152,6 +159,57 @@ export class UsersService {
             }
           : null,
       );
+  }
+
+  async disconnectAccount(userId: string, accountId: string) {
+    const account = await this.prisma.gmailAccount.findUnique({
+      where: { id: accountId },
+      select: { id: true, userId: true, isPrimary: true },
+    });
+
+    if (!account || account.userId !== userId) {
+      throw new NotFoundException('연동 계정을 찾을 수 없습니다.');
+    }
+
+    if (account.isPrimary) {
+      throw new BadRequestException('대표 계정은 연동 해제할 수 없습니다.');
+    }
+
+    await this.prisma.gmailAccount.delete({ where: { id: accountId } });
+
+    const remaining = await this.prisma.gmailAccount.count({
+      where: { userId },
+    });
+    return {
+      disconnectedAccountId: accountId,
+      connectedAccountCount: remaining,
+    };
+  }
+
+  async deleteAccount(
+    userId: string,
+    dto: { reason: string; reasonDetail?: string },
+  ) {
+    return this.prisma.$transaction(async (tx) => {
+      await tx.withdrawalLog.create({
+        data: {
+          reason: dto.reason,
+          reasonDetail:
+            dto.reason === 'other' ? (dto.reasonDetail ?? null) : null,
+        },
+      });
+
+      await tx.user.delete({ where: { id: userId } });
+
+      return { deleted: true };
+    });
+  }
+
+  async updateLastLogin(userId: string) {
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { lastLoginAt: new Date() },
+    });
   }
 
   async getConnectedAccounts(userId: string) {
@@ -337,10 +395,7 @@ export class UsersService {
 function formatDormantDuration(dormantAt: Date): string {
   const now = new Date();
   const diffMs = now.getTime() - dormantAt.getTime();
-  const diffDays = Math.max(
-    0,
-    Math.floor(diffMs / (1000 * 60 * 60 * 24)),
-  );
+  const diffDays = Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
 
   if (diffDays < 1) return '오늘';
   if (diffDays < 30) return `${diffDays}일`;
