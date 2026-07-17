@@ -40,21 +40,7 @@ async function bootstrap() {
 
   const config = new DocumentBuilder()
     .setTitle('IDly API')
-    .setDescription(
-      [
-        'IDly 백엔드 API 문서',
-        '',
-        '## 주요 흐름',
-        '1. Google OAuth 로그인 (`GET /api/auth/google`)',
-        '2. 온보딩: 프로필 → 약관 동의 → (선택) 추가 Gmail',
-        '3. 분석 시작 (`POST /api/analysis/start`) → 상태 폴링',
-        '4. 홈 (`GET /api/home`) · 서비스 상세 · 조치 상태',
-        '',
-        '## 인증',
-        '- `Authorization: Bearer <JWT>` 또는 httpOnly 쿠키 `idly_token`',
-        '- 쿠키-only mutating 요청은 Origin/Referer 허용 목록 검사',
-      ].join('\n'),
-    )
+    .setDescription('IDly 백엔드 API 문서')
     .setVersion('1.0')
     .addBearerAuth(
       {
@@ -79,6 +65,7 @@ async function bootstrap() {
     .addTag('3-1. 정리 화면', '월별 보안 정리 — 이번 달 위험 서비스 목록')
     .addTag('4-1. 마이 화면', '내 프로필 조회')
     .addTag('4-2. 계정 관리', '연결된 Gmail 계정 목록 조회')
+    .addTag('4-3. 탈퇴', '회원 탈퇴')
     .addTag('랜딩 | 베타 신청', '랜딩 페이지 — 베타 신청자 등록')
     .build();
 
@@ -94,6 +81,7 @@ async function bootstrap() {
     '3-1. 정리 화면',
     '4-1. 마이 화면',
     '4-2. 계정 관리',
+    '4-3. 탈퇴',
     '랜딩 | 베타 신청',
   ]);
   for (const pathItem of Object.values(document.paths ?? {})) {
