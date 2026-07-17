@@ -102,6 +102,8 @@ export class AuthService {
       addToUserId,
     });
 
+    await this.usersService.updateLastLogin(user.id);
+
     const payload = { sub: user.id, email: gmailAccount.email };
     const accessToken = this.jwtService.sign(payload);
     const mode = addToUserId ? 'add' : 'login';

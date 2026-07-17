@@ -1,4 +1,9 @@
-import { ConflictException, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -108,6 +113,8 @@ export class UsersService {
           notificationAgreed: true,
           marketingAgreed: true,
           createdAt: true,
+          lastLoginAt: true,
+          scheduledDeleteAt: true,
           gmailAccounts: {
             select: {
               id: true,
@@ -143,6 +150,9 @@ export class UsersService {
                   ).length,
                 0,
               ),
+              connectedAccountCount: user.gmailAccounts.filter(
+                (a) => !a.isPrimary,
+              ).length,
               gmailAccounts: user.gmailAccounts.map((account) => ({
                 ...account,
                 role: account.isPrimary
@@ -152,6 +162,51 @@ export class UsersService {
             }
           : null,
       );
+  }
+
+  async disconnectAccount(userId: string, accountId: string) {
+    const account = await this.prisma.gmailAccount.findUnique({
+      where: { id: accountId },
+      select: { id: true, userId: true, isPrimary: true },
+    });
+
+    if (!account || account.userId !== userId) {
+      throw new NotFoundException('연동 계정을 찾을 수 없습니다.');
+    }
+
+    if (account.isPrimary) {
+      throw new BadRequestException(
+        '대표 계정은 연동 해제할 수 없습니다.',
+      );
+    }
+
+    await this.prisma.gmailAccount.delete({ where: { id: accountId } });
+  }
+
+  async scheduleDelete(
+    userId: string,
+    dto: { reason: string; reasonDetail?: string },
+  ) {
+    const DAYS_UNTIL_DELETE = 30;
+    const scheduledDeleteAt = new Date();
+    scheduledDeleteAt.setDate(scheduledDeleteAt.getDate() + DAYS_UNTIL_DELETE);
+
+    return this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        scheduledDeleteAt,
+        deleteReason: dto.reason,
+        deleteReasonDetail: dto.reasonDetail ?? null,
+      },
+      select: { id: true, scheduledDeleteAt: true },
+    });
+  }
+
+  async updateLastLogin(userId: string) {
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { lastLoginAt: new Date() },
+    });
   }
 
   async getConnectedAccounts(userId: string) {
