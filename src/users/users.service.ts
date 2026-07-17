@@ -183,6 +183,96 @@ export class UsersService {
     return this.prisma.user.update({ where: { id: userId }, data: dto });
   }
 
+  async getDormantAccounts(userId: string) {
+    const accounts = await this.prisma.serviceAccount.findMany({
+      where: { status: 'dormant', gmailAccount: { userId } },
+      select: {
+        id: true,
+        serviceName: true,
+        displayName: true,
+        iconUrl: true,
+        iconLabel: true,
+        dormantAt: true,
+        gmailAccount: { select: { email: true } },
+      },
+      orderBy: { dormantAt: 'desc' },
+    });
+
+    return accounts.map((sa) => ({
+      id: sa.id,
+      serviceName: sa.serviceName,
+      displayName: sa.displayName,
+      iconUrl: sa.iconUrl,
+      iconLabel: sa.iconLabel,
+      email: sa.gmailAccount.email,
+      dormantAt: sa.dormantAt?.toISOString() ?? null,
+      dormantDuration: sa.dormantAt
+        ? formatDormantDuration(sa.dormantAt)
+        : null,
+    }));
+  }
+
+  async restoreAllDormant(userId: string) {
+    const accounts = await this.prisma.serviceAccount.findMany({
+      where: { status: 'dormant', gmailAccount: { userId } },
+      select: { id: true, previousStatus: true },
+    });
+
+    await this.prisma.$transaction(
+      accounts.map((sa) =>
+        this.prisma.serviceAccount.update({
+          where: { id: sa.id },
+          data: {
+            status: sa.previousStatus ?? 'safe',
+            dormantAt: null,
+            previousStatus: null,
+          },
+        }),
+      ),
+    );
+
+    return { restoredCount: accounts.length };
+  }
+
+  async getNotificationSettings(userId: string) {
+    return this.prisma.user.findUniqueOrThrow({
+      where: { id: userId },
+      select: {
+        alertSuspiciousLogin: true,
+        alertPasswordChange: true,
+        alertNewDevice: true,
+        alertRecoveryEmail: true,
+        alertSecurityTip: true,
+        alertEventPromo: true,
+      },
+    });
+  }
+
+  async updateNotificationSettings(
+    userId: string,
+    dto: {
+      alertSuspiciousLogin?: boolean;
+      alertPasswordChange?: boolean;
+      alertNewDevice?: boolean;
+      alertRecoveryEmail?: boolean;
+      alertSecurityTip?: boolean;
+      alertEventPromo?: boolean;
+    },
+  ) {
+    return this.prisma.user.update({
+      where: { id: userId },
+      data: dto,
+      select: {
+        alertSuspiciousLogin: true,
+        alertPasswordChange: true,
+        alertNewDevice: true,
+        alertRecoveryEmail: true,
+        alertSecurityTip: true,
+        alertEventPromo: true,
+      },
+    });
+  }
+
   async saveConsent(
     userId: string,
     dto: {
@@ -217,4 +307,16 @@ export class UsersService {
       },
     });
   }
+}
+
+function formatDormantDuration(dormantAt: Date): string {
+  const now = new Date();
+  const diffMs = now.getTime() - dormantAt.getTime();
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+  if (diffDays < 30) return `${diffDays}일`;
+  const months = Math.floor(diffDays / 30);
+  if (months < 12) return `${months}개월`;
+  const years = Math.floor(months / 12);
+  return `${years}년`;
 }

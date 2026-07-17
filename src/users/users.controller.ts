@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Get,
+  HttpCode,
   Patch,
   Post,
   Req,
@@ -17,6 +18,7 @@ import { UsersService } from './users.service';
 import { JwtGuard } from '../auth/jwt.guard';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { SaveConsentDto } from './dto/save-consent.dto';
+import { UpdateNotificationSettingsDto } from './dto/notification-settings.dto';
 import {
   GmailAccountDto,
   UserDto,
@@ -94,6 +96,117 @@ export class UsersController {
   })
   async getMe(@Req() req) {
     return this.usersService.findById(req.user.sub);
+  }
+
+  @Get('me/dormant-accounts')
+  @ApiTags('4-1. 마이 화면')
+  @ApiOperation({
+    summary: '휴면 계정 목록',
+    description: `현재 사용자의 휴면(\`dormant\`) 상태 서비스 계정 목록을 반환합니다.
+
+**응답 포함 정보**
+- \`id\`, \`serviceName\`, \`displayName\`, \`iconUrl\`, \`iconLabel\`
+- \`email\`: 해당 서비스가 연결된 Gmail 계정 이메일
+- \`dormantAt\`: 휴면 전환 일시 (ISO 8601)
+- \`dormantDuration\`: 휴면 기간 (예: "3개월", "1년")`,
+  })
+  @ApiResponse({
+    status: 200,
+    description: '휴면 계정 목록',
+    schema: {
+      example: [
+        {
+          id: 'sa-uuid',
+          serviceName: 'Tumblr',
+          displayName: 'Tumblr',
+          iconUrl: null,
+          iconLabel: 'T',
+          email: 'minsu@gmail.com',
+          dormantAt: '2026-04-17T00:00:00.000Z',
+          dormantDuration: '3개월',
+        },
+      ],
+    },
+  })
+  async getDormantAccounts(@Req() req) {
+    return this.usersService.getDormantAccounts(req.user.sub);
+  }
+
+  @Patch('me/dormant-accounts/restore-all')
+  @HttpCode(200)
+  @ApiTags('4-1. 마이 화면')
+  @ApiOperation({
+    summary: '휴면 계정 전체 복원',
+    description: '현재 사용자의 모든 휴면 계정을 이전 상태로 복원합니다.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: '전체 복원 완료',
+    schema: { example: { restoredCount: 3 } },
+  })
+  async restoreAllDormant(@Req() req) {
+    return this.usersService.restoreAllDormant(req.user.sub);
+  }
+
+  @Get('me/notification-settings')
+  @ApiTags('4-1. 마이 화면')
+  @ApiOperation({
+    summary: '알림 설정 조회',
+    description: `보안 알림 4종과 마케팅 알림 2종의 현재 설정값을 반환합니다.
+
+**보안 알림**
+- \`alertSuspiciousLogin\`: 의심 로그인 감지
+- \`alertPasswordChange\`: 비밀번호 변경 알림
+- \`alertNewDevice\`: 새 기기 로그인
+- \`alertRecoveryEmail\`: 복구 이메일 변경
+
+**마케팅**
+- \`alertSecurityTip\`: 보안 팁 알림
+- \`alertEventPromo\`: 이벤트 알림`,
+  })
+  @ApiResponse({
+    status: 200,
+    description: '알림 설정',
+    schema: {
+      example: {
+        alertSuspiciousLogin: true,
+        alertPasswordChange: true,
+        alertNewDevice: true,
+        alertRecoveryEmail: true,
+        alertSecurityTip: false,
+        alertEventPromo: false,
+      },
+    },
+  })
+  async getNotificationSettings(@Req() req) {
+    return this.usersService.getNotificationSettings(req.user.sub);
+  }
+
+  @Patch('me/notification-settings')
+  @ApiTags('4-1. 마이 화면')
+  @ApiOperation({
+    summary: '알림 설정 변경',
+    description: '변경할 항목만 포함해서 보내면 됩니다 (partial update).',
+  })
+  @ApiResponse({
+    status: 200,
+    description: '변경된 알림 설정',
+    schema: {
+      example: {
+        alertSuspiciousLogin: true,
+        alertPasswordChange: true,
+        alertNewDevice: true,
+        alertRecoveryEmail: true,
+        alertSecurityTip: false,
+        alertEventPromo: false,
+      },
+    },
+  })
+  async updateNotificationSettings(
+    @Req() req,
+    @Body() body: UpdateNotificationSettingsDto,
+  ) {
+    return this.usersService.updateNotificationSettings(req.user.sub, body);
   }
 
   @Get('me/accounts')
