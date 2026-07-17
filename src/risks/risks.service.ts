@@ -162,9 +162,10 @@ export class RisksService {
   }
 
   private async invalidateSnapshot(userId: string) {
+    // DbNull 대신 sentinel JSON 사용 — Solar의 DbNull 조건부 patch와 구분하기 위함
     await this.prisma.analysisRun.updateMany({
       where: { userId, status: 'completed' },
-      data: { reportSnapshot: Prisma.DbNull },
+      data: { reportSnapshot: { status: 'invalidated' } as unknown as Prisma.InputJsonValue },
     });
   }
 

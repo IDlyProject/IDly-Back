@@ -40,7 +40,8 @@ export class ReportService {
     );
 
     const securityScore = computeSecurityScore(allAccounts);
-    const snapshot = (latestRun?.reportSnapshot ?? null) as ReportSnapshot | null;
+    const raw = latestRun?.reportSnapshot ?? null;
+    const snapshot = raw && (raw as any).status !== 'invalidated' ? (raw as unknown as ReportSnapshot) : null;
 
     const riskCounts = {
       high: allAccounts.filter((a) => a.riskLevel === 'high').length,

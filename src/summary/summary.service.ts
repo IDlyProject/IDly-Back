@@ -44,8 +44,6 @@ export class SummaryService {
       label: ga.label ?? 'Gmail동',
     }));
 
-    const gmailMap = new Map(gmailAccounts.map((ga) => [ga.id, ga]));
-
     const services = gmailAccounts
       .flatMap((ga) =>
         ga.serviceAccounts
