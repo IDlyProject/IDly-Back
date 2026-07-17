@@ -15,6 +15,17 @@ model User {
   requiredTermsAgreedAt DateTime?
   notificationAgreed    Boolean   @default(false)
   marketingAgreed       Boolean   @default(false)
+
+  // 알림 설정 — 보안 알림
+  alertSuspiciousLogin  Boolean   @default(true)
+  alertPasswordChange   Boolean   @default(true)
+  alertNewDevice        Boolean   @default(true)
+  alertRecoveryEmail    Boolean   @default(true)
+
+  // 알림 설정 — 마케팅
+  alertSecurityTip      Boolean   @default(false)
+  alertEventPromo       Boolean   @default(false)
+
   createdAt             DateTime  @default(now())
 
   gmailAccounts GmailAccount[]
@@ -73,6 +84,8 @@ model ServiceAccount {
   interpretation  String?
   resolvedAt      DateTime?
   skippedAt       DateTime?
+  dormantAt       DateTime?
+  previousStatus  String?
   lastAnalyzedAt  DateTime?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
