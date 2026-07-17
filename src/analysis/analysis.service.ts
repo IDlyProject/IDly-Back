@@ -12,10 +12,13 @@ import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
 import FormData from 'form-data';
 import { createHash } from 'crypto';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { GmailService } from '../gmail/gmail.service';
 import { resolveService } from '../common/registry/service-registry';
 import { ANALYSIS_ORPHAN_TTL_MS } from '../common/domain/status';
+import { SolarService } from '../common/solar/solar.service';
+import { computeSecurityScore, isActiveForHomeMetrics } from '../common/domain/metrics';
 import type { AccountStatus, RiskLevel } from '../common/domain/status';
 
 type AiSecurityLevel = '위험' | '주의' | '양호';
@@ -74,6 +77,7 @@ export class AnalysisService implements OnModuleInit {
     private readonly gmailService: GmailService,
     private readonly httpService: HttpService,
     private readonly config: ConfigService,
+    private readonly solarService: SolarService,
   ) {}
 
   async onModuleInit() {
@@ -275,12 +279,18 @@ export class AnalysisService implements OnModuleInit {
           currentStep: 'completed',
           displayMessage: STEP_MESSAGES['completed'],
           completedAt: new Date(),
-          // Surface partial failures without failing the whole run
           failedReason:
             partialErrors.length > 0
               ? `partial_errors: ${partialErrors.slice(0, 5).join('; ')}`
               : null,
         },
+      });
+
+      // Solar snapshot은 비동기로 patch — 분석 완료 UX를 블로킹하지 않음
+      setImmediate(() => {
+        this.buildAndPatchSnapshot(runId, userId).catch((e) =>
+          this.logger.error(`[runId=${runId}] Solar snapshot 생성 실패: ${e}`),
+        );
       });
     } catch (e) {
       this.logger.error(`[runId=${runId}] 파이프라인 실패: ${e}`);
@@ -299,6 +309,65 @@ export class AnalysisService implements OnModuleInit {
     }
     if (error instanceof Error) return error.message.slice(0, 300);
     return 'unknown_error';
+  }
+
+  private async buildAndPatchSnapshot(runId: string, userId: string) {
+    const gmailAccounts = await this.prisma.gmailAccount.findMany({
+      where: { userId },
+      include: {
+        serviceAccounts: {
+          where: { status: { notIn: ['dormant', 'skipped'] } },
+          include: {
+            riskEvidences: {
+              select: { id: true, subject: true, summary: true, riskType: true },
+              orderBy: [{ receivedAt: 'desc' }, { createdAt: 'desc' }],
+              take: 3,
+            },
+          },
+        },
+      },
+    });
+
+    const serviceAccounts = gmailAccounts.flatMap((ga) => ga.serviceAccounts);
+    const activeServices = serviceAccounts.filter((sa) => sa.riskLevel !== 'safe');
+    if (activeServices.length === 0) return;
+
+    // high risk 서비스 우선, 서비스당 최대 2개 evidence — Solar 프롬프트 품질 유지
+    const riskOrder: Record<string, number> = { high: 0, medium: 1, low: 2 };
+    const sortedServices = [...activeServices].sort(
+      (a, b) => (riskOrder[a.riskLevel] ?? 3) - (riskOrder[b.riskLevel] ?? 3),
+    );
+    const evidences = sortedServices.flatMap((sa) =>
+      sa.riskEvidences.slice(0, 2).map((e) => ({ ...e, serviceAccountId: sa.id })),
+    );
+
+    const activeAll = serviceAccounts.filter((a) => isActiveForHomeMetrics(a.status));
+    const score = computeSecurityScore(activeAll);
+
+    const snapshot = await this.solarService.generateReportSnapshot(
+      {
+        securityScore: score,
+        services: sortedServices.map((sa) => ({
+          serviceAccountId: sa.id,
+          serviceName: sa.serviceName,
+          riskLevel: sa.riskLevel,
+          primaryRiskType: sa.primaryRiskType,
+          interpretation: sa.interpretation,
+          evidenceSubjects: sa.riskEvidences.map((e) => e.subject ?? '').filter(Boolean),
+        })),
+      },
+      evidences,
+    );
+
+    if (!snapshot) return;
+
+    // reportSnapshot이 이미 null인 run에만 patch — 조치 무효화 이후 stale 복귀 방지
+    await this.prisma.analysisRun.updateMany({
+      where: { id: runId, reportSnapshot: { equals: Prisma.DbNull } },
+      data: {
+        reportSnapshot: snapshot as unknown as Prisma.InputJsonValue,
+      },
+    });
   }
 
   private async markFailed(runId: string, reason: string) {
