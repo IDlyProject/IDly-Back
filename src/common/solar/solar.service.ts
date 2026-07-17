@@ -122,7 +122,7 @@ ${evidenceList || '없음'}
     {
       "serviceAccountId": "<위 서비스 중 하나의 serviceAccountId>",
       "headline": "서비스명 + 핵심 조치 (10자 이내, 예: 'Twitter 비밀번호 즉시 변경')",
-      "reason": "구체적인 이유 한 문장 (예: '의심스러운 로그인 시도가 감지되었어요')"
+      "reason": "구체적인 이유 한 문장 — 해당 서비스에서 실제 감지된 내용을 바탕으로 (예: '의심스러운 로그인 시도가 감지되었어요')"
     }
   ],
   "riskEvents": [
@@ -134,7 +134,11 @@ ${evidenceList || '없음'}
   ]
 }
 
-주의: serviceAccountId와 evidenceId는 위에서 제공된 값만 사용하세요.`;
+작성 규칙:
+- recommendations의 headline은 서비스마다 반드시 다른 내용으로 작성하세요. "확인이 필요해요" 같은 범용 표현 금지.
+- headline에는 반드시 서비스명이 포함되어야 합니다 (예: 'Google 비밀번호 변경', 'Amazon 로그인 확인').
+- reason은 해당 서비스의 위험 근거(해석, 이메일 제목 등)를 바탕으로 구체적으로 작성하세요. 다른 서비스와 동일한 문장 금지.
+- serviceAccountId와 evidenceId는 위에서 제공된 값만 사용하세요.`;
   }
 
   private validate(

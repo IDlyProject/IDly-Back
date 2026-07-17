@@ -92,25 +92,39 @@ export class ReportService {
         };
       });
 
+    const SECURITY_RISK_TYPES = new Set([
+      'password_reset', 'new_device_login', 'suspicious_login',
+      'account_recovery', 'unauthorized_access', 'data_breach',
+      'phishing', 'malware', 'account_takeover',
+    ]);
+    const seenRiskEventKeys = new Set<string>();
     const riskEvents = allAccounts
       .flatMap((sa) =>
-        sa.riskEvidences.map((e) => {
-          const snapshotEv = snapshot?.riskEvents?.find((ev) => ev.evidenceId === e.id);
-          return {
-            id: e.id,
-            serviceName: cleanServiceName(sa.serviceName),
-            title: snapshotEv?.title ?? e.subject ?? null,
-            description: snapshotEv?.description ?? e.summary ?? null,
-            riskType: e.riskType,
-            receivedAt: e.receivedAt?.toISOString() ?? null,
-          };
-        }),
+        sa.riskEvidences
+          .filter((e) => SECURITY_RISK_TYPES.has(e.riskType))
+          .map((e) => {
+            const snapshotEv = snapshot?.riskEvents?.find((ev) => ev.evidenceId === e.id);
+            return {
+              id: e.id,
+              serviceName: cleanServiceName(sa.serviceName),
+              title: snapshotEv?.title ?? e.subject ?? null,
+              description: snapshotEv?.description ?? e.summary ?? null,
+              riskType: e.riskType,
+              receivedAt: e.receivedAt?.toISOString() ?? null,
+            };
+          }),
       )
       .sort((a, b) => {
         if (!a.receivedAt && !b.receivedAt) return 0;
         if (!a.receivedAt) return 1;
         if (!b.receivedAt) return -1;
         return b.receivedAt.localeCompare(a.receivedAt);
+      })
+      .filter((e) => {
+        const key = `${e.serviceName}::${e.title}`;
+        if (seenRiskEventKeys.has(key)) return false;
+        seenRiskEventKeys.add(key);
+        return true;
       })
       .slice(0, 10);
 
