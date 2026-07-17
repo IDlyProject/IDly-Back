@@ -81,7 +81,7 @@ export class UsersController {
   }
 
   @Get('me')
-  @ApiTags('1-2. 회원가입', '4-1. 마이 화면', '4-2. 계정 관리')
+  @ApiTags('1-2. 회원가입')
   @ApiOperation({
     summary: '내 프로필 조회',
     description: `로그인한 유저의 프로필과 연결된 Gmail 계정 목록을 반환합니다.
@@ -227,7 +227,7 @@ export class UsersController {
 
   @Delete('me')
   @HttpCode(200)
-  @ApiTags('4-2. 계정 관리', '4-3. 탈퇴')
+  @ApiTags('4-3. 탈퇴')
   @ApiOperation({
     summary: '회원 탈퇴',
     description: `회원 계정과 연결된 Gmail/서비스 이용 기록을 즉시 영구 삭제합니다.
@@ -279,7 +279,7 @@ export class UsersController {
   }
 
   @Get('me/accounts')
-  @ApiTags('1-2. 회원가입', '4-2. 계정 관리')
+  @ApiTags('1-2. 회원가입')
   @ApiOperation({
     summary: '연결된 Gmail 계정 목록',
     description: `연결된 Gmail 계정 목록을 반환합니다.
