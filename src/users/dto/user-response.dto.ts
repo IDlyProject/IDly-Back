@@ -80,6 +80,9 @@ export class UserDto {
   @ApiProperty({ example: '2026-07-01T00:00:00.000Z' })
   createdAt: string;
 
+  @ApiProperty({ example: 3 })
+  dormantAccountCount: number;
+
   @ApiProperty({ type: [GmailAccountDto] })
   gmailAccounts: GmailAccountDto[];
 }

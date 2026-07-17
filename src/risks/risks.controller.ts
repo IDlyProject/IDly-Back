@@ -111,7 +111,7 @@ export class RisksController {
     description: `서비스 계정을 휴면 상태(\`dormant\`)로 전환합니다. (\`PATCH\` 권장, \`POST\` 하위 호환)
 
 휴면 계정은 홈 카드 목록에서 제외되며, 보안 점수 계산에서도 빠집니다.
-복원 기능은 현재 미구현(추후 지원 예정).`,
+전환 시 기존 status가 \`previousStatus\`에 저장되어 복원 시 사용됩니다.`,
   })
   @ApiParam({ name: 'serviceAccountId' })
   @ApiResponse({
@@ -122,5 +122,25 @@ export class RisksController {
   @ApiResponse({ status: 404, description: '서비스를 찾을 수 없음' })
   setDormant(@Req() req, @Param('serviceAccountId') id: string) {
     return this.risksService.setDormant(id, req.user.sub);
+  }
+
+  @Patch(':serviceAccountId/restore')
+  @HttpCode(200)
+  @ApiTags('4-1. 마이 화면')
+  @ApiOperation({
+    summary: '휴면 계정 복원 — 휴면 해제 후 이전 상태로 복원',
+    description: `휴면(\`dormant\`) 상태의 서비스 계정을 휴면 전 상태로 복원합니다.
+
+복원된 계정은 홈 카드 목록에 다시 표시되고 보안 점수 계산에 포함됩니다.`,
+  })
+  @ApiParam({ name: 'serviceAccountId' })
+  @ApiResponse({
+    status: 200,
+    description: '복원 완료',
+    schema: { example: { serviceAccountId: 'sa-uuid', status: 'safe' } },
+  })
+  @ApiResponse({ status: 404, description: '서비스를 찾을 수 없음' })
+  restoreDormant(@Req() req, @Param('serviceAccountId') id: string) {
+    return this.risksService.restoreDormant(id, req.user.sub);
   }
 }

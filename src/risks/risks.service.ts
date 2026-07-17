@@ -5,6 +5,7 @@ import {
   countActionRequired,
   isActiveForHomeMetrics,
 } from '../common/domain/metrics';
+import { restoreAccountStatus } from '../common/domain/status';
 
 @Injectable()
 export class RisksService {
@@ -113,12 +114,44 @@ export class RisksService {
     });
     if (!sa) throw new NotFoundException('서비스를 찾을 수 없습니다.');
 
+    if (sa.status === 'dormant') {
+      return { serviceAccountId, status: 'dormant' };
+    }
+
     await this.prisma.serviceAccount.update({
       where: { id: serviceAccountId },
-      data: { status: 'dormant' },
+      data: {
+        status: 'dormant',
+        dormantAt: new Date(),
+        previousStatus: restoreAccountStatus(sa.status),
+      },
     });
 
     return { serviceAccountId, status: 'dormant' };
+  }
+
+  async restoreDormant(serviceAccountId: string, userId: string) {
+    const sa = await this.prisma.serviceAccount.findFirst({
+      where: {
+        id: serviceAccountId,
+        status: 'dormant',
+        gmailAccount: { userId },
+      },
+    });
+    if (!sa) throw new NotFoundException('서비스를 찾을 수 없습니다.');
+
+    const restoredStatus = restoreAccountStatus(sa.previousStatus);
+
+    const updated = await this.prisma.serviceAccount.update({
+      where: { id: serviceAccountId },
+      data: {
+        status: restoredStatus,
+        dormantAt: null,
+        previousStatus: null,
+      },
+    });
+
+    return { serviceAccountId: updated.id, status: updated.status };
   }
 
   private nextStatus(

@@ -13,6 +13,24 @@ export const ACCOUNT_STATUSES = [
 ] as const;
 export type AccountStatus = (typeof ACCOUNT_STATUSES)[number];
 
+export const RESTORABLE_ACCOUNT_STATUSES = [
+  'action_required',
+  'watch',
+  'safe',
+  'resolved',
+  'skipped',
+] as const;
+export type RestorableAccountStatus =
+  (typeof RESTORABLE_ACCOUNT_STATUSES)[number];
+
+export function restoreAccountStatus(status: string | null | undefined) {
+  return RESTORABLE_ACCOUNT_STATUSES.includes(
+    status as RestorableAccountStatus,
+  )
+    ? (status as RestorableAccountStatus)
+    : 'safe';
+}
+
 export const ANALYSIS_RUN_STATUSES = [
   'queued',
   'scanning',
