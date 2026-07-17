@@ -92,8 +92,7 @@ export class UsersController {
 - \`id\`, \`name\`, \`phone\`, \`ageGroup\`, \`requiredTermsAgreed\`, \`requiredTermsAgreedAt\`, \`notificationAgreed\`, \`marketingAgreed\`
 - \`createdAt\`: 가입일 (계정 관리 화면 계정 정보 섹션)
 - \`lastLoginAt\`: 마지막 로그인 일시 (계정 관리 화면 계정 정보 섹션)
-- \`connectedAccountCount\`: 추가 연동 계정 수 (isPrimary=false인 Gmail 수, 계정 관리 화면 계정 정보 섹션)
-- \`scheduledDeleteAt\`: 탈퇴 예약 일시 (설정된 경우)
+- \`connectedAccountCount\`: 연동된 Gmail 계정 총 수 (대표 포함, 계정 관리 화면 계정 정보 섹션)
 - \`dormantAccountCount\`: 마이 화면의 숨긴 계정 수
 - \`gmailAccounts[]\`: 각 계정의 \`email\`, \`isPrimary\`, \`role\`, \`lastSyncedAt\`, 연결된 서비스 목록`,
   })
@@ -230,31 +229,28 @@ export class UsersController {
   @HttpCode(200)
   @ApiTags('4-2. 계정 관리', '4-3. 탈퇴')
   @ApiOperation({
-    summary: '회원 탈퇴 예약 (소프트 딜리트)',
-    description: `탈퇴 요청을 접수하고 30일 후 삭제 예정 일시를 반환합니다.
+    summary: '회원 탈퇴',
+    description: `회원 계정과 연결된 Gmail/서비스 이용 기록을 즉시 영구 삭제합니다.
+
+탈퇴 사유는 사용자 식별 정보 없이 \`WithdrawalLog\`에 별도 저장합니다.
 
 **탈퇴 사유 선택지 (4-3-2 화면)**
 - \`not_frequent\`: 자주 이용하지 않아요
 - \`frequent_errors\`: 오류가 자주 발생해요
 - \`inconvenient\`: 기능이 편리하지 않아요
-- \`other\`: 기타 — \`reasonDetail\`에 직접 입력한 내용 포함
-
-30일 이내에는 재로그인하면 탈퇴가 취소됩니다.
-실제 데이터 삭제는 \`scheduledDeleteAt\` 시점에 처리됩니다.`,
+- \`other\`: 기타 — \`reasonDetail\` 필수`,
   })
   @ApiResponse({
     status: 200,
-    description: '탈퇴 예약 완료',
+    description: '회원 탈퇴 완료',
     schema: {
       example: {
-        id: 'user-uuid',
-        scheduledDeleteAt: '2026-08-17T00:00:00.000Z',
-        gracePeriodDays: 30,
+        deleted: true,
       },
     },
   })
   async deleteMe(@Req() req, @Body() body: DeleteAccountDto) {
-    return this.usersService.scheduleDelete(req.user.sub, body);
+    return this.usersService.deleteAccount(req.user.sub, body);
   }
 
   @Delete('me/accounts/:accountId')
@@ -272,13 +268,13 @@ export class UsersController {
     status: 200,
     description: '연동 해제 완료',
     schema: {
-      example: { disconnectedAccountId: 'gmail-uuid', connectedAccountCount: 2 },
+      example: {
+        disconnectedAccountId: 'gmail-uuid',
+        connectedAccountCount: 2,
+      },
     },
   })
-  async disconnectAccount(
-    @Req() req,
-    @Param('accountId') accountId: string,
-  ) {
+  async disconnectAccount(@Req() req, @Param('accountId') accountId: string) {
     return this.usersService.disconnectAccount(req.user.sub, accountId);
   }
 

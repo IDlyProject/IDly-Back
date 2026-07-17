@@ -11,7 +11,14 @@ export class ServiceAccountSummaryDto {
   riskLevel: string;
 
   @ApiProperty({
-    enum: ['action_required', 'watch', 'safe', 'resolved', 'skipped', 'dormant'],
+    enum: [
+      'action_required',
+      'watch',
+      'safe',
+      'resolved',
+      'skipped',
+      'dormant',
+    ],
     example: 'action_required',
   })
   status: string;
@@ -83,13 +90,13 @@ export class UserDto {
   @ApiPropertyOptional({ example: '2026-07-16T00:00:00.000Z' })
   lastLoginAt: string | null;
 
-  @ApiPropertyOptional({ example: null })
-  scheduledDeleteAt: string | null;
-
   @ApiProperty({ example: 3 })
   dormantAccountCount: number;
 
-  @ApiProperty({ example: 4, description: '연동된 Gmail 계정 총 수 (대표 포함)' })
+  @ApiProperty({
+    example: 4,
+    description: '연동된 Gmail 계정 총 수 (대표 포함)',
+  })
   connectedAccountCount: number;
 
   @ApiProperty({ type: [GmailAccountDto] })

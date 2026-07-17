@@ -27,14 +27,19 @@ model User {
   alertEventPromo       Boolean   @default(false)
 
   lastLoginAt           DateTime?
-  scheduledDeleteAt     DateTime?
-  deleteReason          String?
-  deleteReasonDetail    String?
-  tokenInvalidatedAt    DateTime?
   createdAt             DateTime  @default(now())
 
   gmailAccounts GmailAccount[]
   analysisRuns  AnalysisRun[]
+}
+
+model WithdrawalLog {
+  id           String   @id @default(uuid())
+  reason       String
+  reasonDetail String?
+  deletedAt    DateTime @default(now())
+
+  @@index([reason, deletedAt])
 }
 
 model GmailAccount {

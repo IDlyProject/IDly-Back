@@ -114,7 +114,6 @@ export class UsersService {
           marketingAgreed: true,
           createdAt: true,
           lastLoginAt: true,
-          scheduledDeleteAt: true,
           gmailAccounts: {
             select: {
               id: true,
@@ -173,35 +172,37 @@ export class UsersService {
     }
 
     if (account.isPrimary) {
-      throw new BadRequestException(
-        '대표 계정은 연동 해제할 수 없습니다.',
-      );
+      throw new BadRequestException('대표 계정은 연동 해제할 수 없습니다.');
     }
 
     await this.prisma.gmailAccount.delete({ where: { id: accountId } });
 
-    const remaining = await this.prisma.gmailAccount.count({ where: { userId } });
-    return { disconnectedAccountId: accountId, connectedAccountCount: remaining };
+    const remaining = await this.prisma.gmailAccount.count({
+      where: { userId },
+    });
+    return {
+      disconnectedAccountId: accountId,
+      connectedAccountCount: remaining,
+    };
   }
 
-  async scheduleDelete(
+  async deleteAccount(
     userId: string,
     dto: { reason: string; reasonDetail?: string },
   ) {
-    const DAYS_UNTIL_DELETE = 30;
-    const scheduledDeleteAt = new Date();
-    scheduledDeleteAt.setDate(scheduledDeleteAt.getDate() + DAYS_UNTIL_DELETE);
+    return this.prisma.$transaction(async (tx) => {
+      await tx.withdrawalLog.create({
+        data: {
+          reason: dto.reason,
+          reasonDetail:
+            dto.reason === 'other' ? (dto.reasonDetail ?? null) : null,
+        },
+      });
 
-    return this.prisma.user.update({
-      where: { id: userId },
-      data: {
-        scheduledDeleteAt,
-        deleteReason: dto.reason,
-        deleteReasonDetail: dto.reason === 'other' ? (dto.reasonDetail ?? null) : null,
-        tokenInvalidatedAt: new Date(),
-      },
-      select: { id: true, scheduledDeleteAt: true },
-    }).then((user) => ({ ...user, gracePeriodDays: DAYS_UNTIL_DELETE }));
+      await tx.user.delete({ where: { id: userId } });
+
+      return { deleted: true };
+    });
   }
 
   async updateLastLogin(userId: string) {
@@ -394,10 +395,7 @@ export class UsersService {
 function formatDormantDuration(dormantAt: Date): string {
   const now = new Date();
   const diffMs = now.getTime() - dormantAt.getTime();
-  const diffDays = Math.max(
-    0,
-    Math.floor(diffMs / (1000 * 60 * 60 * 24)),
-  );
+  const diffDays = Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
 
   if (diffDays < 1) return '오늘';
   if (diffDays < 30) return `${diffDays}일`;

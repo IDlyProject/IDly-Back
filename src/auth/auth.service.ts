@@ -1,4 +1,4 @@
-import { ForbiddenException, Injectable, UnauthorizedException } from '@nestjs/common';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { google } from 'googleapis';
@@ -101,13 +101,6 @@ export class AuthService {
       refreshToken: tokens.refresh_token,
       addToUserId,
     });
-
-    if (user.scheduledDeleteAt) {
-      throw new ForbiddenException({
-        errorCode: 'account_scheduled_for_deletion',
-        message: '탈퇴 예약된 계정입니다. 로그인할 수 없습니다.',
-      });
-    }
 
     await this.usersService.updateLastLogin(user.id);
 
