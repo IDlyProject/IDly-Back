@@ -1,8 +1,11 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { HttpService } from '@nestjs/axios';
+import { ConfigService } from '@nestjs/config';
 import { Prisma } from '@prisma/client';
+import { firstValueFrom } from 'rxjs';
 import { PrismaService } from '../../prisma/prisma.service';
 import { resolveService, cleanServiceName } from '../../common/registry/service-registry';
-import { ACTION_KB, resolveKbUrl, getKbSteps } from '../policy/action-kb';
+import { ACTION_KB, ActionKbEntry, resolveKbUrl, getKbSteps } from '../policy/action-kb';
 
 // ─── 내부 타입 ────────────────────────────────────────────────────────────────
 
@@ -138,7 +141,14 @@ function calcProgress(items: DbActionItem[]) {
 
 @Injectable()
 export class ActionAssistantService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly logger = new Logger(ActionAssistantService.name);
+  private readonly SOLAR_URL = 'https://api.upstage.ai/v1/chat/completions';
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly http: HttpService,
+    private readonly config: ConfigService,
+  ) {}
 
   // ── 세션 조회 ────────────────────────────────────────────────────────────────
 
@@ -215,7 +225,8 @@ export class ActionAssistantService {
         status: 'active',
         activeActionItemId: firstRequired?.id ?? null,
         feedbackEnabled: bootstrapFirstAction && !!firstRequired,
-        composerEnabled: false,
+        composerEnabled: true,
+        composerPlaceholder: '보안 관련 궁금한 점이 있으시면 물어보세요',
         messages: {
           create: messages.map((m) => ({
             role: m.role,
@@ -282,7 +293,7 @@ export class ActionAssistantService {
 
       this.appendActionMessages(assistantMsgs, item, displayName, registry, items);
 
-      sessionPatch = { activeActionItemId: item.id, feedbackEnabled: true, composerEnabled: false };
+      sessionPatch = { activeActionItemId: item.id, feedbackEnabled: true, composerEnabled: true, composerPlaceholder: '보안 관련 궁금한 점이 있으시면 물어보세요' };
 
     } else if (body.type === 'feedback') {
       if (!body.feedbackValue) throw new BadRequestException('feedbackValue 필수');
@@ -358,6 +369,7 @@ export class ActionAssistantService {
             activeActionItemId: null,
             feedbackEnabled: false,
             composerEnabled: false,
+            composerPlaceholder: null,
           };
         } else {
           // 남은 조치 있음
@@ -375,7 +387,7 @@ export class ActionAssistantService {
             metadata: { actionList: { title: '남은 조치 사항', actionIds: updatedItems.map((i) => i.id) } },
           });
 
-          sessionPatch = { activeActionItemId: null, feedbackEnabled: false, composerEnabled: false };
+          sessionPatch = { activeActionItemId: null, feedbackEnabled: false, composerEnabled: true, composerPlaceholder: '보안 관련 궁금한 점이 있으시면 물어보세요' };
         }
 
       } else {
@@ -395,6 +407,7 @@ export class ActionAssistantService {
           feedbackEnabled: false,
           composerEnabled: true,
           composerPlaceholder: '막힌 부분을 알려주세요',
+          activeActionItemId: item.id,
         };
       }
 
@@ -432,15 +445,93 @@ export class ActionAssistantService {
       // URL 재제시 + tip + feedback
       this.appendActionMessages(assistantMsgs, item, displayName, registry, items);
 
-      sessionPatch = { composerEnabled: false, feedbackEnabled: true, activeActionItemId: item.id };
+      sessionPatch = { composerEnabled: true, composerPlaceholder: '보안 관련 궁금한 점이 있으시면 물어보세요', feedbackEnabled: true, activeActionItemId: item.id };
 
     } else {
-      // user_text (Phase1: mock)
+      // user_text — Light RAG chatbot
+      const userText = (body.message ?? '').slice(0, 1000).trim();
+      if (!userText) throw new BadRequestException('message 필수');
+
       const userMsg = await this.prisma.actionMessage.create({
-        data: { sessionId: session.id, role: 'user', type: 'text', content: (body.message ?? '').slice(0, 1000) },
+        data: { sessionId: session.id, role: 'user', type: 'text', content: userText },
       });
       userMessage = buildMessageDto(userMsg);
-      assistantMsgs.push({ role: 'assistant', type: 'text', content: '보안 관련 궁금한 점이 있으신가요? 더 자세한 안내는 순차적으로 추가될 예정이에요.' });
+
+      const activeItem = session.activeActionItemId
+        ? (items.find((i) => i.id === session.activeActionItemId) ?? null)
+        : null;
+      const kbEntries = getKbSteps(sa.primaryRiskType);
+
+      const evidences = await this.prisma.riskEvidence.findMany({
+        where: { serviceAccountId },
+        orderBy: { receivedAt: 'desc' },
+        take: 3,
+        select: { subject: true },
+      });
+
+      const regForKb = registry
+        ? {
+            officialUrl: registry.officialUrl ?? undefined,
+            passwordUrl: registry.passwordUrl ?? undefined,
+            securityUrl: registry.securityUrl ?? undefined,
+          }
+        : null;
+      const officialUrl = activeItem
+        ? (activeItem.externalUrl ?? resolveKbUrl(regForKb, kbEntries.find((k) => k.stepType === activeItem.type)?.officialUrlKind ?? null))
+        : (registry?.officialUrl ?? null);
+
+      const solarResult = await this.callSolarChat(userText, {
+        displayName,
+        riskType: sa.primaryRiskType,
+        headline: sa.headline,
+        recentEvidence: evidences.map((e) => e.subject).filter((s): s is string => !!s),
+        activeItem,
+        kbEntries,
+        officialUrl,
+      });
+
+      assistantMsgs.push({ role: 'assistant', type: 'text', content: solarResult.reply });
+
+      if (solarResult.showLink) {
+        const linkItem = activeItem ?? items.find((i) => i.isRequired && i.status !== 'done') ?? null;
+        const card = linkItem
+          ? buildExternalCard(linkItem, displayName, registry)
+          : (registry?.officialUrl
+            ? {
+                label: `${displayName} 공식`,
+                title: displayName,
+                subtitle: null,
+                url: registry.officialUrl,
+                domain: domainFromUrl(registry.officialUrl),
+                trustLabel: '공식 페이지' as const,
+                ctaLabel: '페이지로 이동',
+              }
+            : null);
+        if (card) {
+          assistantMsgs.push({
+            role: 'assistant',
+            type: 'official_link',
+            content: `${displayName} 공식 페이지로 바로 이동할 수 있어요!`,
+            metadata: { externalCard: card },
+          });
+        }
+      }
+
+      if (solarResult.showFeedback && activeItem) {
+        assistantMsgs.push({
+          role: 'assistant',
+          type: 'feedback_actions',
+          content: '',
+          metadata: {
+            feedbackActions: {
+              actionItemId: activeItem.id,
+              completeLabel: '조치를 완료했어요 !',
+              failLabel: '조치하지 못했어요',
+            },
+          },
+        });
+      }
+
       sessionPatch = {};
     }
 
@@ -651,5 +742,112 @@ export class ActionAssistantService {
       orderBy: { createdAt: 'asc' },
     });
     return next?.id ?? null;
+  }
+
+  private async callSolarChat(
+    userMessage: string,
+    context: {
+      displayName: string;
+      riskType: string | null;
+      headline: string | null;
+      recentEvidence: string[];
+      activeItem: DbActionItem | null;
+      kbEntries: ActionKbEntry[];
+      officialUrl: string | null;
+    },
+  ): Promise<{ reply: string; showLink: boolean; showFeedback: boolean }> {
+    const apiKey = this.config.get<string>('SOLAR_API_KEY');
+    if (!apiKey) {
+      this.logger.warn('SOLAR_API_KEY 미설정 — fallback 응답 사용');
+      return { reply: this.kbFallbackReply(context), showLink: false, showFeedback: false };
+    }
+
+    const riskTypeLabel: Record<string, string> = {
+      new_device_login: '새 기기 로그인 감지',
+      password_reset: '비밀번호 재설정 요청',
+      verification_code: '인증 코드 요청',
+      account_recovery: '계정 복구 시도',
+      permission_grant: '앱 권한 부여',
+      security_recommendation: '보안 알림',
+    };
+    const riskLabel = riskTypeLabel[context.riskType ?? ''] ?? (context.riskType ?? '보안 위험');
+
+    const kbSummary = context.kbEntries
+      .map(
+        (k) =>
+          `- [${k.title}] ${k.help ?? k.why}\n  막힐 때: ${k.fallbackAdvice.map((a) => a.message).join(' / ')}`,
+      )
+      .join('\n');
+
+    const systemPrompt = `당신은 IDly 앱의 보안 도우미입니다. 사용자가 계정 보안 조치를 진행하는 것을 돕습니다.
+말투는 친근하고 간결한 한국어 존댓말로 작성하세요. 문장은 짧고 명확하게, 2-3문장 이내로.
+
+[현재 상황]
+서비스: ${context.displayName}
+감지된 위험: ${riskLabel}
+요약: ${context.headline ?? '보안 위험이 감지됐어요'}${context.recentEvidence.length > 0 ? `\n관련 이메일: ${context.recentEvidence.join(', ')}` : ''}${context.activeItem ? `\n현재 진행 중인 조치: ${context.activeItem.title} — ${context.activeItem.why ?? ''}` : ''}
+
+[조치 안내]
+${kbSummary}
+
+[규칙]
+- URL이나 링크를 직접 생성하거나 제시하지 마세요. 링크가 필요하면 showLink: true로 신호를 보내면 시스템이 공식 링크를 첨부합니다.
+- 보안과 무관한 질문에는 "보안 관련 내용 위주로 도와드릴 수 있어요"라고 답하세요.
+- 확실하지 않으면 공식 사이트 확인을 권유하세요.
+
+반드시 아래 JSON 형식으로만 응답하세요:
+{
+  "reply": "사용자에게 전달할 답변 (2-3문장 이내)",
+  "showLink": true 또는 false,
+  "showFeedback": true 또는 false
+}
+showLink는 공식 페이지 링크를 함께 보여주면 도움이 될 때 true.
+showFeedback은 현재 조치를 시도해볼 수 있는 상태일 때 true.`;
+
+    try {
+      const { data } = await firstValueFrom(
+        this.http.post(
+          this.SOLAR_URL,
+          {
+            model: 'solar-pro',
+            messages: [
+              { role: 'system', content: systemPrompt },
+              { role: 'user', content: userMessage },
+            ],
+            response_format: { type: 'json_object' },
+            temperature: 0.4,
+          },
+          {
+            headers: {
+              Authorization: `Bearer ${apiKey}`,
+              'Content-Type': 'application/json',
+            },
+            timeout: 15_000,
+          },
+        ),
+      );
+
+      const content = data.choices?.[0]?.message?.content;
+      if (!content) return { reply: this.kbFallbackReply(context), showLink: false, showFeedback: false };
+      const cleaned = content.replace(/^```json\s*/i, '').replace(/```\s*$/, '').trim();
+      const raw = JSON.parse(cleaned);
+      return {
+        reply: typeof raw.reply === 'string' && raw.reply.trim() ? raw.reply.trim() : this.kbFallbackReply(context),
+        showLink: raw.showLink === true && !!context.officialUrl,
+        showFeedback: raw.showFeedback === true && !!context.activeItem,
+      };
+    } catch (err) {
+      this.logger.error('Solar 채팅 실패', (err as Error).message);
+      return { reply: this.kbFallbackReply(context), showLink: false, showFeedback: false };
+    }
+  }
+
+  private kbFallbackReply(context: { activeItem: DbActionItem | null; kbEntries: ActionKbEntry[] }): string {
+    if (context.activeItem) {
+      const kb = context.kbEntries.find((k) => k.stepType === context.activeItem!.type);
+      if (kb?.fallbackAdvice?.[0]) return kb.fallbackAdvice[0].message;
+      if (kb?.help) return kb.help;
+    }
+    return '보안 관련 궁금한 점이 있으시면 공식 사이트의 보안 설정 메뉴를 확인해보세요.';
   }
 }
