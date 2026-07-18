@@ -57,7 +57,7 @@ class SendMessageDto {
     description:
       'dynamic 화면 이벤트 타입. action_select는 조치 카드 선택, feedback은 완료/실패 버튼, failure_reason은 실패 사유 입력입니다.',
   })
-  @IsEnum(['action_select', 'feedback', 'failure_reason'])
+  @IsIn(['action_select', 'feedback', 'failure_reason'])
   type: 'action_select' | 'feedback' | 'failure_reason';
 
   @ApiProperty({
@@ -253,7 +253,8 @@ export class RisksController {
   @ApiParam({ name: 'serviceAccountId' })
   @ApiResponse({
     status: 200,
-    description: '세션 정보 또는 null',
+    description:
+      '세션 정보 반환. 아직 세션이 없거나 완료 후 미결 필수 조치가 남은 경우 `null` 반환 — 클라이언트는 null 체크 후 POST /action-session으로 세션을 생성하세요.',
     schema: {
       example: {
         sessionId: 'session-uuid',
@@ -337,7 +338,57 @@ export class RisksController {
       },
     },
   })
-  @ApiResponse({ status: 200, description: '세션 생성 또는 기존 세션 반환' })
+  @ApiResponse({
+    status: 200,
+    description: '세션 생성 또는 기존 세션 반환. 응답 형태는 GET /action-session과 동일',
+    schema: {
+      example: {
+        sessionId: 'session-uuid',
+        serviceAccountId: 'service-account-uuid',
+        sessionStatus: 'active',
+        readOnly: false,
+        activeActionItemId: 'action-item-uuid',
+        feedbackEnabled: true,
+        composerEnabled: false,
+        composerPlaceholder: null,
+        title: '지금 바로 조치하기',
+        botProfile: { name: '보안 도우미', avatarKey: 'owl' },
+        progress: { doneCount: 0, totalRequired: 2, label: '0/2 완료' },
+        riskIntroCard: {
+          severity: 'high',
+          title: '보안 위험 감지',
+          description: '새로운 기기에서 로그인이 감지되었어요.',
+        },
+        recommendedActions: [
+          {
+            id: 'action-item-uuid',
+            type: 'change_password',
+            title: '비밀번호 변경하기',
+            subtitle: '이전 조합과 겹치지 않는 비밀번호를 사용해요.',
+            status: 'pending',
+            required: true,
+            selectable: true,
+            externalCard: {
+              label: 'Twitter 공식',
+              title: '비밀번호 변경하기',
+              url: 'https://x.com/settings/password',
+              domain: 'x.com/settings/password',
+              trustLabel: '공식 페이지',
+              ctaLabel: '페이지로 이동',
+            },
+          },
+        ],
+        messages: [
+          { id: 'msg-1', role: 'assistant', type: 'risk_intro', text: '보안 위험 감지' },
+          { id: 'msg-2', role: 'assistant', type: 'action_list', text: '추천 조치 사항' },
+          { id: 'msg-3', role: 'user', type: 'user_chip', text: '비밀번호 변경하기' },
+          { id: 'msg-4', role: 'assistant', type: 'official_link', text: '비밀번호 변경하기 페이지로 바로 이동할 수 있어요!' },
+          { id: 'msg-5', role: 'assistant', type: 'feedback_actions', text: '' },
+        ],
+        completion: null,
+      },
+    },
+  })
   createSession(
     @Req() req,
     @Param('serviceAccountId') id: string,

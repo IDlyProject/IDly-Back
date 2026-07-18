@@ -60,7 +60,63 @@ else              → "위험"
 - \`analyzedAt\`: 마지막 분석 완료 시각 (ISO 8601)
 - \`services[]\`: 위험 서비스 목록 (위험도순, safe 제외). 각 서비스에 \`evidences[]\`·\`actionItems[]\` 포함`,
   })
-  @ApiResponse({ status: 200, description: '전체 보안 리포트' })
+  @ApiResponse({
+    status: 200,
+    description: '전체 보안 리포트',
+    schema: {
+      example: {
+        securityScore: 42,
+        grade: '위험',
+        scoreDescription: '즉각적인 조치가 필요한 계정이 있어요.',
+        hasAiSnapshot: true,
+        riskCounts: { high: 2, medium: 1, low: 0, safe: 3 },
+        summaryCounts: { danger: 2, caution: 1, safe: 3 },
+        analyzedAt: '2026-07-18T10:00:00.000Z',
+        riskEvents: [
+          {
+            id: 'evidence-uuid',
+            serviceName: 'Twitter',
+            title: '새 기기 로그인 감지',
+            description: '새로운 기기에서 로그인이 감지되었어요.',
+            riskType: 'new_device_login',
+            receivedAt: '2026-07-18T09:00:00.000Z',
+          },
+        ],
+        services: [
+          {
+            id: 'sa-uuid',
+            serviceName: 'Twitter',
+            iconUrl: null,
+            iconLabel: 'T',
+            riskLevel: 'high',
+            status: 'action_required',
+            primaryRiskType: 'new_device_login',
+            headline: '새 기기 로그인 감지',
+            reason: '비밀번호 변경을 권장합니다.',
+            sourceMailAccount: { email: 'user@gmail.com', label: 'Gmail동' },
+            evidences: [
+              {
+                id: 'evidence-uuid',
+                title: '새 기기 로그인 감지',
+                description: '새로운 기기에서 로그인이 감지되었어요.',
+                riskType: 'new_device_login',
+                receivedAt: '2026-07-18T09:00:00.000Z',
+              },
+            ],
+            actionItems: [
+              {
+                id: 'action-item-uuid',
+                title: '비밀번호 변경하기',
+                isRequired: true,
+                status: 'pending',
+                externalUrl: 'https://x.com/settings/password',
+              },
+            ],
+          },
+        ],
+      },
+    },
+  })
   getReport(@Req() req) {
     return this.reportService.getReport(req.user.sub);
   }
