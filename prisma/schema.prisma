@@ -31,6 +31,7 @@ model User {
 
   gmailAccounts GmailAccount[]
   analysisRuns  AnalysisRun[]
+  securityChat  SecurityChat?
 }
 
 model WithdrawalLog {
@@ -190,6 +191,30 @@ model ActionAttempt {
 
   session    ActionSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   actionItem ActionItem    @relation(fields: [actionItemId], references: [id], onDelete: Cascade)
+}
+
+model SecurityChat {
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user     User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages SecurityChatMessage[]
+}
+
+model SecurityChatMessage {
+  id        String   @id @default(uuid())
+  chatId    String
+  role      String   // user | assistant
+  type      String   // text | action_list | official_link | card_news | tip | exit_cta
+  content   String
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  chat SecurityChat @relation(fields: [chatId], references: [id], onDelete: Cascade)
+
+  @@index([chatId, createdAt])
 }
 
 model BetaApplicant {
