@@ -11,6 +11,7 @@ import {
   resolveEncryptionKey,
 } from '../common/crypto/token-crypto';
 import { restoreAccountStatus } from '../common/domain/status';
+import { assertSafeDisplayText } from '../common/sanitize/text-safety';
 
 @Injectable()
 export class UsersService {
@@ -247,6 +248,8 @@ export class UsersService {
     userId: string,
     dto: { name?: string; phone?: string; ageGroup?: string },
   ) {
+    if (dto.name != null) assertSafeDisplayText(dto.name, '이름');
+    if (dto.phone != null) assertSafeDisplayText(dto.phone, '전화번호');
     return this.prisma.user.update({ where: { id: userId }, data: dto });
   }
 

@@ -23,6 +23,8 @@ import {
   AnalysisStatusResponseDto,
   StartAnalysisResponseDto,
 } from './dto/analysis-response.dto';
+import { RateLimit } from '../common/guards/rate-limit.decorator';
+import { RateLimitGuard } from '../common/guards/rate-limit.guard';
 
 class StartAnalysisDto {
   @ApiProperty({
@@ -37,12 +39,13 @@ class StartAnalysisDto {
 }
 
 @ApiBearerAuth('access-token')
-@UseGuards(JwtGuard)
+@UseGuards(JwtGuard, RateLimitGuard)
 @Controller('analysis')
 export class AnalysisController {
   constructor(private readonly analysisService: AnalysisService) {}
 
   @Post('start')
+  @RateLimit({ limit: 3, windowMs: 60 * 60 * 1000, key: 'user' }) // 유저당 시간당 3회
   @ApiTags('1-2. 회원가입')
   @ApiOperation({
     summary: '분석 시작 — analysisId 즉시 반환, 실제 분석은 백그라운드 실행',

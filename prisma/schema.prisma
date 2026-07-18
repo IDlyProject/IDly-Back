@@ -29,9 +29,24 @@ model User {
   lastLoginAt           DateTime?
   createdAt             DateTime  @default(now())
 
-  gmailAccounts GmailAccount[]
-  analysisRuns  AnalysisRun[]
-  securityChat  SecurityChat?
+  gmailAccounts  GmailAccount[]
+  analysisRuns   AnalysisRun[]
+  securityChat   SecurityChat?
+  refreshTokens  AuthRefreshToken[]
+}
+
+/// 앱 로그인 refresh 토큰 (로테이션·즉시 폐기용). Gmail OAuth refreshToken 과 별개.
+model AuthRefreshToken {
+  id        String    @id @default(uuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
 }
 
 model WithdrawalLog {

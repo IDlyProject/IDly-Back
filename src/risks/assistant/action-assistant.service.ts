@@ -14,6 +14,11 @@ import {
   planKbActionMerge,
 } from '../policy/action-kb';
 import { assertNoSensitiveData } from '../../common/sanitize/secret-detector';
+import {
+  redactForLlmContext,
+  redactServiceLabel,
+  sanitizeLlmOutput,
+} from '../../common/sanitize/text-safety';
 
 // ─── 내부 타입 ────────────────────────────────────────────────────────────────
 
@@ -932,13 +937,23 @@ export class ActionAssistantService {
       )
       .join('\n');
 
+    const safeDisplay = redactServiceLabel(context.displayName);
+    const safeHeadline = redactForLlmContext(context.headline, 120);
+    const safeEvidence = context.recentEvidence
+      .map((e) => redactForLlmContext(e, 60))
+      .filter(Boolean)
+      .slice(0, 3);
+    const safeActive = context.activeItem
+      ? `${redactForLlmContext(context.activeItem.title, 40)} — ${redactForLlmContext(context.activeItem.why, 80)}`
+      : '';
+
     const systemPrompt = `당신은 IDly 앱의 보안 도우미입니다. 사용자가 계정 보안 조치를 진행하는 것을 돕습니다.
 말투는 친근하고 간결한 한국어 존댓말로 작성하세요. 문장은 짧고 명확하게, 2-3문장 이내로.
 
 [현재 상황]
-서비스: ${context.displayName}
+서비스: ${safeDisplay}
 감지된 위험: ${riskLabel}
-요약: ${context.headline ?? '보안 위험이 감지됐어요'}${context.recentEvidence.length > 0 ? `\n관련 이메일: ${context.recentEvidence.join(', ')}` : ''}${context.activeItem ? `\n현재 진행 중인 조치: ${context.activeItem.title} — ${context.activeItem.why ?? ''}` : ''}
+요약: ${safeHeadline || '보안 위험이 감지됐어요'}${safeEvidence.length > 0 ? `\n관련 신호: ${safeEvidence.join('; ')}` : ''}${safeActive ? `\n현재 진행 중인 조치: ${safeActive}` : ''}
 
 [조치 안내]
 ${kbSummary}
@@ -947,6 +962,7 @@ ${kbSummary}
 - URL이나 링크를 직접 생성하거나 제시하지 마세요. 링크가 필요하면 showLink: true로 신호를 보내면 시스템이 공식 링크를 첨부합니다.
 - 보안과 무관한 질문에는 "보안 관련 내용 위주로 도와드릴 수 있어요"라고 답하세요.
 - 확실하지 않으면 공식 사이트 확인을 권유하세요.
+- 이메일 주소, UUID, 전화번호, 인증코드, 비밀번호를 절대 출력하지 마세요.
 
 반드시 아래 JSON 형식으로만 응답하세요:
 {
@@ -984,8 +1000,12 @@ showFeedback은 현재 조치를 시도해볼 수 있는 상태일 때 true.`;
       if (!content) return { reply: this.kbFallbackReply(context), showLink: false, showFeedback: false };
       const cleaned = content.replace(/^```json\s*/i, '').replace(/```\s*$/, '').trim();
       const raw = JSON.parse(cleaned);
+      const replyRaw =
+        typeof raw.reply === 'string' && raw.reply.trim()
+          ? raw.reply.trim()
+          : this.kbFallbackReply(context);
       return {
-        reply: typeof raw.reply === 'string' && raw.reply.trim() ? raw.reply.trim() : this.kbFallbackReply(context),
+        reply: sanitizeLlmOutput(replyRaw),
         showLink: raw.showLink === true && !!context.officialUrl,
         showFeedback: raw.showFeedback === true && !!context.activeItem,
       };
