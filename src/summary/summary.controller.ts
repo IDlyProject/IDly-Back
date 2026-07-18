@@ -50,7 +50,36 @@ export class SummaryController {
   - \`actions[].status\`: pending | done | skipped
   - \`actions[].updatedAt\`: ISO 8601`,
   })
-  @ApiResponse({ status: 200, description: '월별 보안 정리 데이터' })
+  @ApiResponse({
+    status: 200,
+    description: '월별 보안 정리 데이터',
+    schema: {
+      example: {
+        month: '2026-07',
+        progress: { done: 3, skipped: 1, pending: 4 },
+        mailAccounts: [{ id: 'ga-uuid', email: 'user@gmail.com', label: 'Gmail동' }],
+        services: [
+          {
+            id: 'sa-uuid',
+            serviceName: 'Twitter',
+            iconUrl: null,
+            iconLabel: 'T',
+            riskLevel: 'high',
+            status: 'action_required',
+            sourceMailAccount: { id: 'ga-uuid', email: 'user@gmail.com', label: 'Gmail동' },
+            actions: [
+              {
+                id: 'action-item-uuid',
+                title: '비밀번호 변경하기',
+                status: 'pending',
+                updatedAt: '2026-07-18T10:00:00.000Z',
+              },
+            ],
+          },
+        ],
+      },
+    },
+  })
   getSummary(@Req() req) {
     return this.summaryService.getSummary(req.user.sub);
   }
