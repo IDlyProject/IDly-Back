@@ -178,6 +178,8 @@ model ActionMessage {
   createdAt DateTime @default(now())
 
   session ActionSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId, createdAt])
 }
 
 model ActionAttempt {

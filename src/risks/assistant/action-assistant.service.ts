@@ -284,6 +284,7 @@ export class ActionAssistantService {
     if (body.type === 'action_select') {
       const item = items.find((i) => i.id === body.actionItemId);
       if (!item) throw new NotFoundException('조치 항목을 찾을 수 없습니다.');
+      if (item.status === 'done') throw new BadRequestException('이미 완료된 조치 항목입니다.');
 
       // user chip
       const userMsg = await this.prisma.actionMessage.create({
@@ -302,28 +303,25 @@ export class ActionAssistantService {
       if (!item) throw new NotFoundException('조치 항목을 찾을 수 없습니다.');
 
       if (body.feedbackValue === 'completed') {
+        if (item.status === 'done') throw new BadRequestException('이미 완료된 조치 항목입니다.');
+
         // user chip
         const userMsg = await this.prisma.actionMessage.create({
           data: { sessionId: session.id, role: 'user', type: 'user_chip', content: '조치를 완료했어요 !' },
         });
         userMessage = buildMessageDto(userMsg);
 
-        // item done + attempt
-        await this.prisma.actionItem.update({ where: { id: item.id }, data: { status: 'done' } });
-        await this.prisma.actionAttempt.create({
-          data: { sessionId: session.id, actionItemId: item.id, status: 'completed' },
-        });
-
         const updatedItems = items.map((i) => i.id === item.id ? { ...i, status: 'done' } : i);
         const remainRequired = updatedItems.filter((i) => i.isRequired && i.status !== 'done');
         const progress = calcProgress(updatedItems);
 
         if (remainRequired.length === 0) {
-          // 전체 완료
-          await this.prisma.serviceAccount.update({
-            where: { id: serviceAccountId },
-            data: { status: 'resolved', resolvedAt: new Date() },
-          });
+          // 전체 완료 — 트랜잭션으로 묶음
+          await this.prisma.$transaction([
+            this.prisma.actionItem.update({ where: { id: item.id }, data: { status: 'done' } }),
+            this.prisma.actionAttempt.create({ data: { sessionId: session.id, actionItemId: item.id, status: 'completed' } }),
+            this.prisma.serviceAccount.update({ where: { id: serviceAccountId }, data: { status: 'resolved', resolvedAt: new Date() } }),
+          ]);
           await this.invalidateSnapshot(userId);
 
           // 완료된 목록 메시지
@@ -373,6 +371,11 @@ export class ActionAssistantService {
           };
         } else {
           // 남은 조치 있음
+          await this.prisma.$transaction([
+            this.prisma.actionItem.update({ where: { id: item.id }, data: { status: 'done' } }),
+            this.prisma.actionAttempt.create({ data: { sessionId: session.id, actionItemId: item.id, status: 'completed' } }),
+          ]);
+
           const progressText = progress.label ? `완료! ${progress.label}` : '완료!';
           const remainCount = remainRequired.length;
           assistantMsgs.push({
@@ -384,7 +387,7 @@ export class ActionAssistantService {
             role: 'assistant',
             type: 'action_list',
             content: '남은 조치 사항',
-            metadata: { actionList: { title: '남은 조치 사항', actionIds: updatedItems.map((i) => i.id) } },
+            metadata: { actionList: { title: '남은 조치 사항', actionIds: remainRequired.map((i) => i.id) } },
           });
 
           sessionPatch = { activeActionItemId: null, feedbackEnabled: false, composerEnabled: false, composerPlaceholder: null };
@@ -605,13 +608,15 @@ export class ActionAssistantService {
   ) {
     const card = buildExternalCard(item, displayName, registry);
 
-    // official_link
-    messages.push({
-      role: 'assistant',
-      type: 'official_link',
-      content: card ? `${item.title} 페이지로 바로 이동할 수 있어요!` : item.description ?? item.title,
-      metadata: card ? { externalCard: card } : {},
-    });
+    // official_link — card가 있을 때만 push
+    if (card) {
+      messages.push({
+        role: 'assistant',
+        type: 'official_link',
+        content: `${item.title} 페이지로 바로 이동할 수 있어요!`,
+        metadata: { externalCard: card },
+      });
+    }
 
     // card_news
     const kbForItem = Object.values(ACTION_KB).flat().find((k) => k.stepType === item.type);

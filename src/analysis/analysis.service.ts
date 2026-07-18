@@ -594,15 +594,16 @@ export class AnalysisService implements OnModuleInit {
           const officialUrl = resolveKbUrl(regForKb, kb.officialUrlKind ?? null);
 
           if (existing) {
-            // KB merge — type/why 보강, done 상태는 건드리지 않음
+            // KB merge — type/why/title 보강, done 상태는 건드리지 않음
             await this.prisma.actionItem.update({
               where: { id: existing.id },
               data: {
                 type: kb.stepType,
+                title: kb.title,
                 why: kb.why ?? null,
                 description: existing.description ?? kb.subtitle ?? null,
                 isRequired: kb.required,
-                externalUrl: existing.externalUrl ?? officialUrl ?? null,
+                externalUrl: officialUrl ?? existing.externalUrl ?? null,
                 order: i,
               },
             });

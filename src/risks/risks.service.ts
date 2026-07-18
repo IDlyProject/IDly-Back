@@ -121,6 +121,11 @@ export class RisksService {
     });
     if (!sa) throw new NotFoundException('서비스를 찾을 수 없습니다.');
 
+    await this.prisma.actionSession.updateMany({
+      where: { serviceAccountId, status: 'active' },
+      data: { status: 'abandoned' },
+    });
+
     const updated = await this.prisma.serviceAccount.update({
       where: { id: serviceAccountId },
       data: { status: 'skipped', skippedAt: new Date() },

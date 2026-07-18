@@ -189,7 +189,7 @@ export const ACTION_KB: Record<string, ActionKbEntry[]> = {
       fallbackAdvice: [{ message: '"타사 앱" 또는 "연동된 서비스" 메뉴를 찾아 모르는 앱이 있는지 확인하세요.' }],
     },
     {
-      stepType: 'review_apps',
+      stepType: 'revoke_app_access',
       priority: 1,
       title: '모르는 앱 권한 해제',
       subtitle: '사용하지 않거나 모르는 앱은 바로 해제해요',

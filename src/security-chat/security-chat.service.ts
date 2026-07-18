@@ -72,6 +72,7 @@ export class SecurityChatService {
       include: {
         messages: {
           orderBy: { createdAt: 'asc' },
+          take: 50,
         },
       },
     });
@@ -85,6 +86,17 @@ export class SecurityChatService {
       create: { userId },
       update: {},
     });
+
+    // 최근 대화 히스토리 먼저 조회 (유저 메시지 저장 전 — 중복 방지)
+    const recentHistory = await this.prisma.securityChatMessage.findMany({
+      where: { chatId: chat.id },
+      orderBy: { createdAt: 'desc' },
+      take: this.HISTORY_LIMIT,
+    });
+    const historyForLlm = recentHistory
+      .reverse()
+      .filter((m) => m.role === 'user' || m.type === 'text')
+      .map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content }));
 
     // 유저 메시지 저장
     const userMsg = await this.prisma.securityChatMessage.create({
@@ -103,17 +115,6 @@ export class SecurityChatService {
       },
       orderBy: { createdAt: 'asc' },
     });
-
-    // 최근 대화 히스토리 (LLM 컨텍스트용)
-    const recentHistory = await this.prisma.securityChatMessage.findMany({
-      where: { chatId: chat.id },
-      orderBy: { createdAt: 'desc' },
-      take: this.HISTORY_LIMIT,
-    });
-    const historyForLlm = recentHistory
-      .reverse()
-      .filter((m) => m.role === 'user' || m.type === 'text')
-      .map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content }));
 
     // Solar 호출
     const signal = await this.callSolar(message, allSa, historyForLlm, userId);
