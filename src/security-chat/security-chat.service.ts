@@ -546,8 +546,9 @@ showExitCta: 대화를 마무리하거나 다른 페이지로 안내할 때 true
   }
 
   private async loadAllSa(userId: string) {
-    // safe/resolved/dormant/skipped 제외, 위험도 높은 순 top 10
-    return this.prisma.serviceAccount.findMany({
+    // safe/resolved/dormant/skipped 제외. evidence 본문/제목은 LLM에 넣지 않음.
+    // riskLevel 문자열 알파벳 정렬이 위험도 순이 아니므로 가져온 뒤 수동 정렬.
+    const rows = await this.prisma.serviceAccount.findMany({
       where: {
         gmailAccount: { userId },
         status: { in: ['action_required', 'watch'] },
@@ -555,11 +556,17 @@ showExitCta: 대화를 마무리하거나 다른 페이지로 안내할 때 true
       },
       include: {
         actionItems: { where: { isRequired: true }, orderBy: { order: 'asc' } },
-        riskEvidences: { orderBy: { receivedAt: 'desc' }, take: 2 },
       },
-      orderBy: [{ riskLevel: 'asc' }, { createdAt: 'asc' }], // high(asc) = 알파벳순이라 별도 정렬 필요시 수동
-      take: 10,
+      take: 30,
     });
+    const rank: Record<string, number> = { high: 0, medium: 1, low: 2, safe: 3 };
+    return rows
+      .sort(
+        (a, b) =>
+          (rank[a.riskLevel] ?? 9) - (rank[b.riskLevel] ?? 9) ||
+          a.createdAt.getTime() - b.createdAt.getTime(),
+      )
+      .slice(0, 10);
   }
 
   private buildChatResponse(chatId: string, messages: { id: string; role: string; type: string; content: string; metadata: Prisma.JsonValue; createdAt: Date }[]) {

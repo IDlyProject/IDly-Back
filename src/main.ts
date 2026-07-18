@@ -1,5 +1,6 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import cookieParser from 'cookie-parser';
@@ -7,13 +8,27 @@ import helmet from 'helmet';
 import { PrismaExceptionFilter } from './common/filters/prisma-exception.filter';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+    bodyParser: false,
+  });
+
+  // Render/프록시 뒤에서 실제 클라이언트 IP를 rate-limit에 사용
+  app.set('trust proxy', 1);
+
+  // 요청 본문 크기 제한 (DoS / 대용량 JSON 완화)
+  app.useBodyParser('json', { limit: '100kb' });
+  app.useBodyParser('urlencoded', { limit: '100kb', extended: true });
 
   // 보안 헤더 (Swagger CDN 허용은 docs 켤 때만 완화 필요할 수 있음)
   app.use(
     helmet({
       contentSecurityPolicy: process.env.NODE_ENV === 'production' ? undefined : false,
       crossOriginEmbedderPolicy: false,
+      // 프로덕션에서 HTTPS 강제 힌트
+      hsts:
+        process.env.NODE_ENV === 'production'
+          ? { maxAge: 15552000, includeSubDomains: true }
+          : false,
     }),
   );
   app.getHttpAdapter().getInstance().disable('x-powered-by');
@@ -48,6 +63,7 @@ async function bootstrap() {
 
   app.setGlobalPrefix('api');
 
+  // production: 기본 비활성. 로컬/스테이징 또는 ENABLE_SWAGGER=true 일 때만 노출
   const enableSwagger =
     process.env.ENABLE_SWAGGER === 'true' ||
     process.env.NODE_ENV !== 'production';

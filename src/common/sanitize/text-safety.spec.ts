@@ -23,6 +23,14 @@ describe('text-safety', () => {
     expect(out).toContain('[id]');
   });
 
+  it('masks phone-like and long digit runs', () => {
+    const out = sanitizeLlmOutput('연락처 010-1234-5678 코드 987654');
+    expect(out).not.toContain('010-1234-5678');
+    expect(out).not.toContain('987654');
+    expect(out).toContain('[전화]');
+    expect(out).toContain('[숫자]');
+  });
+
   it('redacts email-like service labels', () => {
     expect(redactServiceLabel('wkdgustj102@gmail.com')).toMatch(/\*\*\*/);
     expect(redactServiceLabel('Twitter')).toBe('Twitter');

@@ -12,7 +12,6 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import {
-  ApiBearerAuth,
   ApiExcludeEndpoint,
   ApiOperation,
   ApiProperty,
@@ -23,7 +22,6 @@ import { IsOptional, IsString } from 'class-validator';
 import type { Request, Response } from 'express';
 import { AuthService } from './auth.service';
 import { ConfigService } from '@nestjs/config';
-import { JwtGuard } from './jwt.guard';
 import { RateLimit } from '../common/guards/rate-limit.decorator';
 import { RateLimitGuard } from '../common/guards/rate-limit.guard';
 
@@ -137,6 +135,7 @@ export class AuthController {
   }
 
   @Get('google/callback')
+  @RateLimit({ limit: 40, windowMs: 60_000, key: 'ip' })
   @ApiExcludeEndpoint()
   async googleCallback(
     @Query('code') code: string,
@@ -205,9 +204,12 @@ export class AuthController {
 
   @Post('logout')
   @HttpCode(200)
-  @ApiBearerAuth('access-token')
-  @UseGuards(JwtGuard)
-  @ApiOperation({ summary: '로그아웃 — refresh 폐기 + 쿠키 삭제' })
+  @RateLimit({ limit: 30, windowMs: 60_000, key: 'ip' })
+  @ApiOperation({
+    summary: '로그아웃 — refresh 폐기 + 쿠키 삭제',
+    description:
+      'access 만료 상태에서도 동작. `idly_refresh` 쿠키 또는 Bearer access로 세션 폐기.',
+  })
   async logout(
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
@@ -217,8 +219,18 @@ export class AuthController {
       | undefined;
     if (raw) {
       await this.authService.revokeRefreshToken(raw);
-    } else if (req['user']?.sub) {
-      await this.authService.revokeAllRefreshTokens(req['user'].sub);
+    } else {
+      // refresh 쿠키 없을 때 Bearer access로 유저 전체 refresh 폐기 시도
+      const authHeader = req.headers.authorization;
+      const bearer = authHeader?.startsWith('Bearer ')
+        ? authHeader.slice(7)
+        : (req as any).cookies?.[this.ACCESS_COOKIE];
+      if (bearer) {
+        const payload = this.authService.verifyToken(bearer);
+        if (payload?.sub) {
+          await this.authService.revokeAllRefreshTokens(payload.sub);
+        }
+      }
     }
     this.clearAuthCookies(res);
     return { ok: true };
