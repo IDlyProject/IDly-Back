@@ -1,12 +1,16 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import {
-  computeSecurityScore,
-  countActionRequired,
-  isActiveForHomeMetrics,
-} from '../common/domain/metrics';
 import { restoreAccountStatus } from '../common/domain/status';
+import { cleanServiceName, resolveService } from '../common/registry/service-registry';
+import { ACTION_KB } from './policy/action-kb';
+
+const RISK_BADGE: Record<string, string> = {
+  high: '보안 위험',
+  medium: '주의 필요',
+  low: '낮음',
+  safe: '안전',
+};
 
 @Injectable()
 export class RisksService {
@@ -19,15 +23,47 @@ export class RisksService {
         gmailAccount: { select: { email: true, label: true } },
         riskEvidences: { orderBy: { receivedAt: 'desc' } },
         actionItems: { orderBy: { order: 'asc' } },
+        actionSessions: {
+          where: { status: 'active' },
+          orderBy: { startedAt: 'desc' },
+          take: 1,
+        },
       },
     });
 
     if (!sa) throw new NotFoundException('서비스를 찾을 수 없습니다.');
 
+    const registry = resolveService(sa.serviceName);
+    const displayName = sa.displayName ?? cleanServiceName(sa.serviceName);
+
+    const recentEvents = sa.riskEvidences.slice(0, 5).map((e) => ({
+      id: e.id,
+      sender: e.sender,
+      receivedAt: e.receivedAt?.toISOString() ?? null,
+      subject: e.subject,
+      summary: e.summary,
+      riskType: e.riskType,
+    }));
+
+    const pendingItems = sa.actionItems.filter(
+      (a) => a.isRequired && (a.status === 'pending' || a.status === 'failed'),
+    );
+    const firstPending = pendingItems[0] ?? null;
+    const activeSessionId = sa.actionSessions[0]?.id ?? null;
+
+    // Screen 1 카드뉴스 스트립 — 첫 번째 KB cardNews 항목
+    const kbFlat = Object.values(ACTION_KB).flat();
+    const firstKbWithCard = sa.actionItems
+      .map((a) => kbFlat.find((k) => k.stepType === a.type))
+      .find((k) => k?.cardNews != null);
+    const cardNews = firstKbWithCard?.cardNews ?? null;
+
     return {
       id: sa.id,
       analysisId: sa.analysisRunId,
       serviceName: sa.serviceName,
+      displayName,
+      riskBadgeText: RISK_BADGE[sa.riskLevel] ?? sa.riskLevel,
       sourceMailAccount: {
         id: sa.gmailAccountId,
         email: sa.gmailAccount.email,
@@ -39,14 +75,31 @@ export class RisksService {
       headline: sa.headline,
       summary: sa.summary,
       interpretation: sa.interpretation,
-      evidences: sa.riskEvidences.map((e) => ({
-        id: e.id,
-        sender: e.sender,
-        receivedAt: e.receivedAt?.toISOString() ?? null,
-        subject: e.subject,
-        summary: e.summary,
-        evidenceType: e.riskType,
+      activeSessionId,
+      cardNews,
+      primaryCta: firstPending
+        ? {
+            actionItemId: firstPending.id,
+            label: firstPending.title,
+            officialUrl: firstPending.externalUrl ?? registry?.officialUrl ?? null,
+          }
+        : null,
+      recentEvents,
+      actionItems: sa.actionItems.map((a) => ({
+        id: a.id,
+        type: a.type,
+        title: a.title,
+        subtitle: a.description ?? null,
+        description: a.description,
+        why: a.why ?? null,
+        required: a.isRequired,
+        isRequired: a.isRequired,
+        externalUrl: a.externalUrl ?? null,
+        officialUrl: a.externalUrl ?? null,
+        status: a.status,
+        order: a.order,
       })),
+      // 하위 호환 — 기존 actionGuide 필드 유지
       actionGuide: {
         title: '이렇게 대응하세요',
         description: sa.interpretation ?? '',
@@ -62,53 +115,24 @@ export class RisksService {
     };
   }
 
-  async updateActionStatus(
-    serviceAccountId: string,
-    userId: string,
-    body: {
-      status: 'resolved' | 'skipped' | 'pending';
-      completedStepIds?: string[];
-    },
-  ) {
+  async skipAccount(serviceAccountId: string, userId: string) {
     const sa = await this.prisma.serviceAccount.findFirst({
       where: { id: serviceAccountId, gmailAccount: { userId } },
     });
     if (!sa) throw new NotFoundException('서비스를 찾을 수 없습니다.');
 
-    if (body.completedStepIds?.length) {
-      await this.prisma.actionItem.updateMany({
-        where: { serviceAccountId, id: { in: body.completedStepIds } },
-        data: { status: 'done' },
-      });
-    }
+    await this.prisma.actionSession.updateMany({
+      where: { serviceAccountId, status: 'active' },
+      data: { status: 'abandoned', completedAt: new Date(), feedbackEnabled: false, composerEnabled: false, composerPlaceholder: null },
+    });
 
     const updated = await this.prisma.serviceAccount.update({
       where: { id: serviceAccountId },
-      data: {
-        status: this.nextStatus(body.status, sa.riskLevel),
-        resolvedAt: body.status === 'resolved' ? new Date() : null,
-        skippedAt: body.status === 'skipped' ? new Date() : null,
-      },
+      data: { status: 'skipped', skippedAt: new Date() },
     });
-
-    const allAccounts = await this.prisma.serviceAccount.findMany({
-      where: { gmailAccount: { userId } },
-    });
-    const activeAccounts = allAccounts.filter((a) =>
-      isActiveForHomeMetrics(a.status),
-    );
 
     await this.invalidateSnapshot(userId);
-
-    return {
-      serviceAccountId: updated.id,
-      status: updated.status,
-      resolvedAt: updated.resolvedAt?.toISOString() ?? null,
-      homeDelta: {
-        actionRequiredCount: countActionRequired(activeAccounts),
-        securityScore: computeSecurityScore(activeAccounts),
-      },
-    };
+    return { serviceAccountId: updated.id, status: updated.status };
   }
 
   async setDormant(serviceAccountId: string, userId: string) {
@@ -120,6 +144,11 @@ export class RisksService {
     if (sa.status === 'dormant') {
       return { serviceAccountId, status: 'dormant' };
     }
+
+    await this.prisma.actionSession.updateMany({
+      where: { serviceAccountId, status: 'active' },
+      data: { status: 'abandoned', completedAt: new Date(), feedbackEnabled: false, composerEnabled: false, composerPlaceholder: null },
+    });
 
     await this.prisma.serviceAccount.update({
       where: { id: serviceAccountId },
@@ -167,16 +196,5 @@ export class RisksService {
       where: { userId, status: 'completed' },
       data: { reportSnapshot: { status: 'invalidated' } as unknown as Prisma.InputJsonValue },
     });
-  }
-
-  private nextStatus(
-    requestedStatus: 'resolved' | 'skipped' | 'pending',
-    riskLevel: string,
-  ): string {
-    if (requestedStatus === 'resolved') return 'resolved';
-    if (requestedStatus === 'skipped') return 'skipped';
-    if (riskLevel === 'high' || riskLevel === 'medium') return 'action_required';
-    if (riskLevel === 'low') return 'watch';
-    return 'safe';
   }
 }
