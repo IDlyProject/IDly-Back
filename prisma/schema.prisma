@@ -31,6 +31,7 @@ model User {
 
   gmailAccounts GmailAccount[]
   analysisRuns  AnalysisRun[]
+  securityChat  SecurityChat?
 }
 
 model WithdrawalLog {
@@ -101,10 +102,11 @@ model ServiceAccount {
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
-  gmailAccount  GmailAccount   @relation(fields: [gmailAccountId], references: [id], onDelete: Cascade)
-  analysisRun   AnalysisRun?   @relation(fields: [analysisRunId], references: [id])
-  riskEvidences RiskEvidence[]
-  actionItems   ActionItem[]
+  gmailAccount    GmailAccount    @relation(fields: [gmailAccountId], references: [id], onDelete: Cascade)
+  analysisRun     AnalysisRun?    @relation(fields: [analysisRunId], references: [id])
+  riskEvidences   RiskEvidence[]
+  actionItems     ActionItem[]
+  actionSessions  ActionSession[]
 
   @@unique([gmailAccountId, serviceName])
   @@index([gmailAccountId, status])
@@ -130,16 +132,93 @@ model RiskEvidence {
 model ActionItem {
   id               String   @id @default(uuid())
   serviceAccountId String
+  type             String   @default("unknown") // KB stepType: change_password | enable_2fa | ...
   title            String
   description      String?
+  why              String?
   isRequired       Boolean  @default(false)
   externalUrl      String?
   order            Int      @default(0)
-  status           String   @default("pending") // pending | done | skipped
+  status           String   @default("pending") // pending | done | failed | skipped
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
-  serviceAccount ServiceAccount @relation(fields: [serviceAccountId], references: [id], onDelete: Cascade)
+  serviceAccount ServiceAccount  @relation(fields: [serviceAccountId], references: [id], onDelete: Cascade)
+  attempts       ActionAttempt[]
+
+  @@index([serviceAccountId, status])
+}
+
+model ActionSession {
+  id                  String    @id @default(uuid())
+  serviceAccountId    String
+  status              String    @default("active") // active | completed | abandoned
+  activeActionItemId  String?
+  feedbackEnabled     Boolean   @default(false)
+  composerEnabled     Boolean   @default(false)
+  composerPlaceholder String?
+  startedAt           DateTime  @default(now())
+  completedAt         DateTime?
+  updatedAt           DateTime  @updatedAt
+
+  serviceAccount ServiceAccount  @relation(fields: [serviceAccountId], references: [id], onDelete: Cascade)
+  messages       ActionMessage[]
+  attempts       ActionAttempt[]
+
+  @@index([serviceAccountId, status])
+  // Partial unique: 서비스 계정당 active 세션 1개 — SQL migration에서 생성
+  // CREATE UNIQUE INDEX "ActionSession_one_active_per_sa" ON "ActionSession"("serviceAccountId") WHERE status = 'active';
+}
+
+model ActionMessage {
+  id        String   @id @default(uuid())
+  sessionId String
+  role      String   // assistant | user
+  type      String   // text | risk_intro | action_list | user_chip | official_link | tip | card_news | feedback_actions | celebration | exit_cta
+  content   String
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  session ActionSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId, createdAt])
+}
+
+model ActionAttempt {
+  id             String   @id @default(uuid())
+  sessionId      String
+  actionItemId   String
+  status         String   // completed | failed | skipped
+  reason         String?
+  reasonCategory String?  // cannot_find_page | login_failed | not_my_account | do_later | other
+  createdAt      DateTime @default(now())
+
+  session    ActionSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  actionItem ActionItem    @relation(fields: [actionItemId], references: [id], onDelete: Cascade)
+}
+
+model SecurityChat {
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user     User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages SecurityChatMessage[]
+}
+
+model SecurityChatMessage {
+  id        String   @id @default(uuid())
+  chatId    String
+  role      String   // user | assistant
+  type      String   // text | action_list | official_link | card_news | tip | exit_cta
+  content   String
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  chat SecurityChat @relation(fields: [chatId], references: [id], onDelete: Cascade)
+
+  @@index([chatId, createdAt])
 }
 
 model BetaApplicant {

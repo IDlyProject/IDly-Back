@@ -16,6 +16,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { GmailService } from '../gmail/gmail.service';
 import { resolveService } from '../common/registry/service-registry';
+import { planKbActionMerge } from '../risks/policy/action-kb';
 import { ANALYSIS_ORPHAN_TTL_MS } from '../common/domain/status';
 import { SolarService } from '../common/solar/solar.service';
 import { computeSecurityScore, isActiveForHomeMetrics } from '../common/domain/metrics';
@@ -567,32 +568,52 @@ export class AnalysisService implements OnModuleInit {
         });
       }
 
-      const existingActions = await this.prisma.actionItem.count({
+      const existingActions = await this.prisma.actionItem.findMany({
         where: { serviceAccountId: sa.id },
+        orderBy: { order: 'asc' },
       });
-      const shouldRefreshActions =
-        riskLevel !== 'safe' &&
-        primaryRiskType &&
-        (existingActions === 0 ||
-          (hasNewEvidence && existing?.primaryRiskType !== primaryRiskType));
+
+      // non-safe 계정은 매 분석마다 KB merge — enrich 스크립트/특정 메일함에 의존하지 않도록 일반화
+      const shouldRefreshActions = riskLevel !== 'safe' && Boolean(primaryRiskType);
 
       if (shouldRefreshActions) {
-        if (existingActions > 0) {
-          await this.prisma.actionItem.deleteMany({
-            where: { serviceAccountId: sa.id },
+        const plan = planKbActionMerge(existingActions, primaryRiskType, registry);
+
+        for (const u of plan.updates) {
+          await this.prisma.actionItem.update({
+            where: { id: u.id },
+            data: {
+              type: u.type,
+              title: u.title,
+              why: u.why,
+              description: u.description,
+              isRequired: u.isRequired,
+              externalUrl: u.externalUrl,
+              order: u.order,
+            },
           });
         }
-        const template = this.getActionTemplate(primaryRiskType, registry);
-        for (const [i, step] of template.entries()) {
+
+        for (const c of plan.creates) {
           await this.prisma.actionItem.create({
             data: {
               serviceAccountId: sa.id,
-              title: step.title,
-              description: step.description,
-              isRequired: step.isRequired,
-              externalUrl: step.externalUrl ?? null,
-              order: i,
+              type: c.type,
+              title: c.title,
+              description: c.description,
+              why: c.why,
+              isRequired: c.isRequired,
+              externalUrl: c.externalUrl,
+              order: c.order,
+              status: c.status,
             },
+          });
+        }
+
+        if (plan.skipIds.length > 0) {
+          await this.prisma.actionItem.updateMany({
+            where: { id: { in: plan.skipIds } },
+            data: { status: 'skipped' },
           });
         }
       }
@@ -772,125 +793,5 @@ export class AnalysisService implements OnModuleInit {
     return map[riskType];
   }
 
-  private getActionTemplate(
-    riskType: RiskType,
-    registry: ReturnType<typeof resolveService>,
-  ): {
-    title: string;
-    description: string;
-    isRequired: boolean;
-    externalUrl?: string | null;
-  }[] {
-    const officialStep = registry.officialUrl
-      ? [
-          {
-            title: '공식 페이지 열기',
-            description: '메일 링크가 아닌 공식 사이트로 이동해요.',
-            isRequired: false,
-            externalUrl: registry.officialUrl,
-          },
-        ]
-      : [];
-    const passwordStep = {
-      title: '새 비밀번호로 변경',
-      description: '이전 조합과 겹치지 않는 비밀번호를 사용해요.',
-      isRequired: true,
-      externalUrl: registry.passwordUrl,
-    };
-
-    const templates: Record<
-      RiskType,
-      {
-        title: string;
-        description: string;
-        isRequired: boolean;
-        externalUrl?: string | null;
-      }[]
-    > = {
-      new_device_login: [
-        ...officialStep,
-        passwordStep,
-        {
-          title: '알 수 없는 기기 로그아웃',
-          description: '최근 로그인 기기 목록에서 모르는 기기를 제거해요.',
-          isRequired: true,
-        },
-        {
-          title: '같은 비밀번호를 쓰는 계정 점검',
-          description: '비밀번호를 재사용 중인 다른 계정도 바꿔요.',
-          isRequired: false,
-        },
-      ],
-      password_reset: [
-        {
-          title: '재설정 요청이 본인 활동인지 확인',
-          description: '내가 요청한 게 아니라면 바로 비밀번호를 바꿔요.',
-          isRequired: true,
-        },
-        passwordStep,
-        {
-          title: '복구 이메일·전화번호 확인',
-          description: '내 정보로 설정되어 있는지 확인해요.',
-          isRequired: false,
-        },
-      ],
-      verification_code: [
-        {
-          title: '인증 코드 요청이 본인 활동인지 확인',
-          description: '내가 요청한 게 아니라면 무시하고 비밀번호를 바꿔요.',
-          isRequired: true,
-        },
-        {
-          title: '최근 로그인 기록 확인',
-          description: '모르는 접속 기록이 있는지 확인해요.',
-          isRequired: true,
-        },
-      ],
-      account_recovery: [
-        {
-          title: '복구 요청이 본인 활동인지 확인',
-          description: '내가 요청한 게 아니라면 즉시 비밀번호를 바꿔요.',
-          isRequired: true,
-        },
-        passwordStep,
-        {
-          title: '복구 이메일·전화번호 재설정',
-          description: '내 정보로 다시 설정해요.',
-          isRequired: false,
-        },
-      ],
-      permission_grant: [
-        {
-          title: '연결된 앱·권한 목록 확인',
-          description: '모르는 앱이 있으면 권한을 해제해요.',
-          isRequired: true,
-        },
-        {
-          title: '모르는 앱 권한 해제',
-          description: '사용하지 않거나 모르는 앱은 바로 해제해요.',
-          isRequired: true,
-        },
-        {
-          title: '비밀번호 변경',
-          description: '의심스러운 접근이 있었다면 비밀번호도 바꿔요.',
-          isRequired: false,
-        },
-      ],
-      security_recommendation: [
-        ...officialStep,
-        {
-          title: '보안 알림 확인',
-          description: '공식 사이트에서 직접 보안 상태를 확인해요.',
-          isRequired: false,
-        },
-        {
-          title: '2단계 인증 설정 확인',
-          description: '2단계 인증이 켜져 있는지 확인해요.',
-          isRequired: false,
-        },
-      ],
-    };
-
-    return templates[riskType] ?? templates.security_recommendation;
-  }
 }
+

@@ -51,8 +51,8 @@ export class SummaryService {
           .map((sa) => ({ ...sa, _ga: ga })),
       )
       .sort((a, b) => {
-        const pendingA = a.actionItems.filter((i) => i.status === 'pending').length;
-        const pendingB = b.actionItems.filter((i) => i.status === 'pending').length;
+        const pendingA = a.actionItems.filter((i) => i.status === 'pending' || i.status === 'failed').length;
+        const pendingB = b.actionItems.filter((i) => i.status === 'pending' || i.status === 'failed').length;
         return pendingB - pendingA;
       });
 
