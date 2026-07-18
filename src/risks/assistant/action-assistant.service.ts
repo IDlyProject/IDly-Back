@@ -186,18 +186,47 @@ export class ActionAssistantService {
   async getSession(serviceAccountId: string, userId: string) {
     const sa = await this.assertOwnership(serviceAccountId, userId);
 
-    const session = await this.prisma.actionSession.findFirst({
+    const activeSession = await this.prisma.actionSession.findFirst({
       where: {
         serviceAccountId,
-        status: { in: ['active', 'completed'] },
+        status: 'active',
       },
-      orderBy: [{ status: 'asc' }, { startedAt: 'desc' }], // active 우선
+      orderBy: { startedAt: 'desc' },
       include: sessionMessagesInclude,
     });
 
-    if (!session) return null;
+    if (activeSession) {
+      return this.buildSessionResponse(
+        activeSession,
+        chronologicalMessages(activeSession.messages),
+        sa,
+      );
+    }
 
-    return this.buildSessionResponse(session, chronologicalMessages(session.messages), sa);
+    const completedSession = await this.prisma.actionSession.findFirst({
+      where: {
+        serviceAccountId,
+        status: 'completed',
+      },
+      orderBy: { completedAt: 'desc' },
+      include: sessionMessagesInclude,
+    });
+
+    if (!completedSession) return null;
+
+    const items = await this.loadItems(serviceAccountId);
+    const hasOpenRequiredAction = items.some(
+      (i) => i.isRequired && (i.status === 'pending' || i.status === 'failed'),
+    );
+    if (['action_required', 'watch'].includes(sa.status) && hasOpenRequiredAction) {
+      return null;
+    }
+
+    return this.buildSessionResponse(
+      completedSession,
+      chronologicalMessages(completedSession.messages),
+      sa,
+    );
   }
 
   // ── 세션 생성 ────────────────────────────────────────────────────────────────
@@ -659,7 +688,11 @@ export class ActionAssistantService {
     const riskLevelMap: Record<string, string> = { high: '위험', medium: '주의', low: '낮음', safe: '안전' };
 
     let completion: object | null = null;
-    if (session.status === 'completed') {
+    if (
+      session.status === 'completed'
+      && progress.totalRequired > 0
+      && progress.doneCount >= progress.totalRequired
+    ) {
       const gmailUserId = sa.gmailAccount?.userId;
       if (!gmailUserId) throw new Error('gmailAccount 관계 로드 실패 — serviceAccount에 gmailAccount가 없습니다.');
       const nextSa = await this.findNextActionRequired(

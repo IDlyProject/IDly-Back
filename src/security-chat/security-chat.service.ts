@@ -51,6 +51,50 @@ interface SolarSignal {
   showExitCta: boolean;
 }
 
+const ACTION_INTENT_KEYWORDS: { intent: string; terms: string[] }[] = [
+  { intent: 'password', terms: ['비밀번호', '패스워드', 'password', 'reset', '재설정', '변경'] },
+  { intent: '2fa', terms: ['2단계', '2fa', 'mfa', '인증', '보안 계층'] },
+  { intent: 'logout', terms: ['로그아웃', '기기', '세션', '접근 차단'] },
+  { intent: 'recovery', terms: ['복구', '이메일', '전화번호'] },
+  { intent: 'permission', terms: ['권한', '앱', '연결된 앱', '해제'] },
+];
+
+function scoreActionForMessage(
+  item: { title: string; description: string | null; externalUrl: string | null; order: number },
+  message: string,
+): number {
+  const haystack = `${item.title} ${item.description ?? ''}`.toLowerCase();
+  const normalizedMessage = message.toLowerCase();
+  let score = item.externalUrl ? 2 : 0;
+
+  for (const group of ACTION_INTENT_KEYWORDS) {
+    const messageHit = group.terms.some((term) => normalizedMessage.includes(term.toLowerCase()));
+    if (!messageHit) continue;
+    const itemHit = group.terms.some((term) => haystack.includes(term.toLowerCase()));
+    if (itemHit) score += 10;
+  }
+
+  for (const token of normalizedMessage.split(/\s+/).filter((t) => t.length >= 2)) {
+    if (haystack.includes(token)) score += 1;
+  }
+
+  return score;
+}
+
+function findBestActionForMessage<
+  T extends { type: string; title: string; description: string | null; externalUrl: string | null; order: number },
+>(items: T[], actionType: string | null, userMessage: string): T | null {
+  const exactType = actionType ? items.find((a) => a.type === actionType) : null;
+  if (exactType) return exactType;
+
+  const ranked = items
+    .map((item) => ({ item, score: scoreActionForMessage(item, userMessage) }))
+    .filter(({ score }) => score > 0)
+    .sort((a, b) => b.score - a.score || a.item.order - b.item.order);
+
+  return ranked[0]?.item ?? null;
+}
+
 // ─── Service ──────────────────────────────────────────────────────────────────
 
 @Injectable()
@@ -152,18 +196,25 @@ export class SecurityChatService {
         const registry = resolveService(targetSa.serviceName);
         const displayName = targetSa.displayName ?? cleanServiceName(targetSa.serviceName);
         const kbEntries = getKbSteps(targetSa.primaryRiskType);
-        const kbEntry = signal.actionType
-          ? kbEntries.find((k) => k.stepType === signal.actionType)
-          : kbEntries[0];
+        const targetItem = findBestActionForMessage(
+          targetSa.actionItems,
+          signal.actionType,
+          message,
+        );
+        const kbEntry = targetItem
+          ? kbEntries.find((k) => k.stepType === targetItem.type)
+          : signal.actionType
+            ? kbEntries.find((k) => k.stepType === signal.actionType)
+            : kbEntries[0];
 
         const officialUrlKind = kbEntry?.officialUrlKind ?? null;
-        let url: string | null = null;
-        if (officialUrlKind === 'password') url = registry?.passwordUrl ?? registry?.officialUrl ?? null;
+        let url: string | null = targetItem?.externalUrl ?? null;
+        if (!url && officialUrlKind === 'password') url = registry?.passwordUrl ?? registry?.officialUrl ?? null;
         else if (officialUrlKind === 'security') url = registry?.securityUrl ?? registry?.officialUrl ?? null;
-        else url = registry?.officialUrl ?? null;
+        else if (!url) url = registry?.officialUrl ?? null;
 
-        const targetItem = targetSa.actionItems.find((a) => a.type === signal.actionType);
         const actionTitle = targetItem?.title ?? kbEntry?.title ?? displayName;
+        const actionSubtitle = targetItem?.description ?? kbEntry?.subtitle ?? null;
 
         if (url) {
           let domain: string | null = null;
@@ -177,7 +228,7 @@ export class SecurityChatService {
               externalCard: {
                 label: `${displayName} 공식`,
                 title: actionTitle,
-                subtitle: kbEntry?.subtitle ?? null,
+                subtitle: actionSubtitle,
                 url,
                 domain,
                 trustLabel: '공식 페이지',
