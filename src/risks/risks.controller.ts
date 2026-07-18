@@ -146,7 +146,7 @@ export class RisksController {
   // ── 보안 도우미 세션 ──────────────────────────────────────────────────────────
 
   @Get(':serviceAccountId/action-session')
-  @ApiTags('2-4. 보안 도우미')
+  @ApiTags('2-3. 계정 상세 · 보안 조치')
   @ApiOperation({
     summary: '현재 보안도우미 세션 조회',
     description: `active/completed 세션이 있으면 반환, 없으면 null 반환.`,
@@ -159,7 +159,7 @@ export class RisksController {
 
   @Post(':serviceAccountId/action-session')
   @HttpCode(200)
-  @ApiTags('2-4. 보안 도우미')
+  @ApiTags('2-3. 계정 상세 · 보안 조치')
   @ApiOperation({
     summary: '보안도우미 세션 생성 (또는 기존 세션 반환)',
     description: `active 세션이 있으면 idempotent하게 반환합니다.
@@ -182,7 +182,7 @@ export class RisksController {
 
   @Post(':serviceAccountId/action-session/messages')
   @HttpCode(200)
-  @ApiTags('2-4. 보안 도우미')
+  @ApiTags('2-3. 계정 상세 · 보안 조치')
   @ApiOperation({
     summary: '보안도우미 메시지 전송',
     description: `**type 종류**
