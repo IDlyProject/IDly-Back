@@ -10,7 +10,7 @@ export interface ServiceRegistryItem {
 export const SERVICE_REGISTRY: ServiceRegistryItem[] = [
   {
     serviceName: 'Google',
-    aliases: ['google', '구글'],
+    aliases: ['google', '구글', 'gmail', 'gmail.com'],
     domain: 'google.com',
     officialUrl: 'https://myaccount.google.com',
     passwordUrl: 'https://myaccount.google.com/security',

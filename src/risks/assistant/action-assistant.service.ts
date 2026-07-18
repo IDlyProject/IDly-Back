@@ -81,10 +81,21 @@ function buildExternalCard(
   item: DbActionItem,
   displayName: string,
   registry: ReturnType<typeof resolveService> | null,
+  officialUrlKind?: 'password' | 'security' | 'official' | null,
 ): ExternalCard | null {
-  const url = item.externalUrl ?? null;
-  if (!url && !registry?.officialUrl) return null;
-  const resolvedUrl = url ?? registry?.officialUrl ?? null;
+  const registryForKbUrl = registry
+    ? {
+        officialUrl: registry.officialUrl ?? undefined,
+        passwordUrl: registry.passwordUrl ?? undefined,
+        securityUrl: registry.securityUrl ?? undefined,
+      }
+    : null;
+  const url = item.externalUrl
+    ?? resolveKbUrl(registryForKbUrl, officialUrlKind ?? null)
+    ?? registry?.officialUrl
+    ?? null;
+  if (!url) return null;
+  const resolvedUrl = url;
   return {
     label: `${displayName} 공식`,
     title: item.title,
@@ -98,6 +109,7 @@ function buildExternalCard(
 
 function buildActionStepDto(item: DbActionItem, displayName: string, registry: ReturnType<typeof resolveService> | null) {
   const selectable = item.status === 'pending' || item.status === 'failed';
+  const kbEntry = Object.values(ACTION_KB).flat().find((k) => k.stepType === item.type);
   return {
     id: item.id,
     type: item.type,
@@ -110,7 +122,7 @@ function buildActionStepDto(item: DbActionItem, displayName: string, registry: R
     isRequired: item.isRequired,
     order: item.order,
     selectable,
-    externalCard: buildExternalCard(item, displayName, registry),
+    externalCard: buildExternalCard(item, displayName, registry, kbEntry?.officialUrlKind),
     externalUrl: item.externalUrl ?? null,
     officialUrl: item.externalUrl ?? null,
   };
@@ -558,9 +570,9 @@ export class ActionAssistantService {
         },
         nextServiceAccountId: nextSa,
         exitCtas: [
-          { id: 'home', label: '홈으로 돌아가기', style: 'home', enabled: true },
-          ...(nextSa ? [{ id: 'next_account', label: '다음 계정 보안 조치 하기', style: 'next_account', enabled: true }] : []),
-          { id: 'report', label: '보안 리포트 보러 가기', style: 'report', enabled: true },
+          { id: 'home', label: '홈으로 돌아가기', style: 'home', enabled: true, href: '/home' },
+          ...(nextSa ? [{ id: 'next_account', label: '다음 계정 보안 조치 하기', style: 'next_account', enabled: true, href: `/service-accounts/${nextSa}` }] : []),
+          { id: 'report', label: '보안 리포트 보러 가기', style: 'report', enabled: true, href: '/report' },
         ],
       };
     }
@@ -590,7 +602,8 @@ export class ActionAssistantService {
     registry: ReturnType<typeof resolveService> | null,
     items: DbActionItem[],
   ) {
-    const card = buildExternalCard(item, displayName, registry);
+    const kbForItem = Object.values(ACTION_KB).flat().find((k) => k.stepType === item.type);
+    const card = buildExternalCard(item, displayName, registry, kbForItem?.officialUrlKind);
 
     // official_link — card가 있을 때만 push
     if (card) {
@@ -603,7 +616,6 @@ export class ActionAssistantService {
     }
 
     // card_news
-    const kbForItem = Object.values(ACTION_KB).flat().find((k) => k.stepType === item.type);
     if (kbForItem?.cardNews) {
       messages.push({
         role: 'assistant',
