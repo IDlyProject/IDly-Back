@@ -25,7 +25,11 @@ services:
       - key: JWT_SECRET
         sync: false
       - key: JWT_EXPIRES_IN
-        value: 7d
+        value: 1h
+      - key: REFRESH_TOKEN_DAYS
+        value: "7"
+      - key: ENABLE_SWAGGER
+        value: "false"
       - key: REFRESH_TOKEN_SECRET
         sync: false
       - key: AI_SERVER_URL

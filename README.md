@@ -59,12 +59,23 @@ npm run start:dev
 |------|------|
 | `DATABASE_URL` | PostgreSQL 연결 문자열 |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` / `GOOGLE_REDIRECT_URI` | OAuth |
-| `JWT_SECRET` | Access JWT 서명 (prod 필수) |
-| `JWT_EXPIRES_IN` | 기본 `7d` |
+| `JWT_SECRET` | Access JWT 서명 (prod 필수, 로컬과 **다른** 값 권장) |
+| `JWT_EXPIRES_IN` | Access JWT 수명 — 기본 **`1h`** (refresh 로테이션과 함께 사용) |
+| `REFRESH_TOKEN_DAYS` | App refresh 쿠키/DB 수명 일수 — 기본 `7` |
 | `REFRESH_TOKEN_SECRET` | Google refresh token AES-256-GCM 키 (base64 32바이트, prod 필수) |
+| `ENABLE_SWAGGER` | `true`면 production에서도 `/docs` 노출. 기본: production 비활성 |
 | `AI_SERVER_URL` | 분석 서버 base URL |
 | `FRONTEND_URL` / `LANDING_URL` | CORS · OAuth 리다이렉트 |
-| `NODE_ENV` | `production` 시 시크릿 강제 |
+| `NODE_ENV` | `production` 시 시크릿 강제 · Swagger 기본 오프 · Secure 쿠키 |
+
+### 인증 쿠키
+
+| 쿠키 | 용도 | path |
+|------|------|------|
+| `idly_token` | Access JWT (단기) | `/` |
+| `idly_refresh` | Refresh (로테이션, DB 해시 저장) | `/api/auth` |
+
+FE는 access 만료 시 `POST /api/auth/refresh` (`credentials: 'include'`) 로 갱신합니다.
 
 ## 스크립트
 

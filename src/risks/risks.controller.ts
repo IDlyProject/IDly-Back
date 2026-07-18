@@ -31,6 +31,8 @@ import {
 import { RisksService } from './risks.service';
 import { ActionAssistantService } from './assistant/action-assistant.service';
 import { JwtGuard } from '../auth/jwt.guard';
+import { RateLimit } from '../common/guards/rate-limit.decorator';
+import { RateLimitGuard } from '../common/guards/rate-limit.guard';
 
 class CreateSessionDto {
   @ApiProperty({
@@ -101,7 +103,7 @@ class SendMessageDto {
 }
 
 @ApiBearerAuth('access-token')
-@UseGuards(JwtGuard)
+@UseGuards(JwtGuard, RateLimitGuard)
 @Controller('service-accounts')
 export class RisksController {
   constructor(
@@ -401,6 +403,7 @@ export class RisksController {
 
   @Post(':serviceAccountId/action-session/messages')
   @HttpCode(200)
+  @RateLimit({ limit: 30, windowMs: 60_000, key: 'user' })
   @ApiTags('2-3. 계정 상세 · 보안 조치')
   @ApiOperation({
     summary: '보안도우미 메시지 전송',
