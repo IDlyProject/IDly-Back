@@ -4,6 +4,7 @@ import {
   Delete,
   Get,
   HttpCode,
+  NotFoundException,
   Param,
   Patch,
   Post,
@@ -102,7 +103,9 @@ export class UsersController {
     description: '유저 프로필 + Gmail 계정 목록',
   })
   async getMe(@Req() req) {
-    return this.usersService.findById(req.user.sub);
+    const user = await this.usersService.findById(req.user.sub);
+    if (!user) throw new NotFoundException('유저를 찾을 수 없습니다.');
+    return user;
   }
 
   @Get('me/dormant-accounts')
