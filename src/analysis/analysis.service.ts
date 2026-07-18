@@ -16,7 +16,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { GmailService } from '../gmail/gmail.service';
 import { resolveService } from '../common/registry/service-registry';
-import { getKbSteps, resolveKbUrl } from '../risks/policy/action-kb';
+import { planKbActionMerge } from '../risks/policy/action-kb';
 import { ANALYSIS_ORPHAN_TTL_MS } from '../common/domain/status';
 import { SolarService } from '../common/solar/solar.service';
 import { computeSecurityScore, isActiveForHomeMetrics } from '../common/domain/metrics';
@@ -572,70 +572,49 @@ export class AnalysisService implements OnModuleInit {
         where: { serviceAccountId: sa.id },
         orderBy: { order: 'asc' },
       });
-      const shouldRefreshActions =
-        riskLevel !== 'safe' &&
-        primaryRiskType &&
-        (existingActions.length === 0 ||
-          (hasNewEvidence && existing?.primaryRiskType !== primaryRiskType) ||
-          // type=unknown 항목이 있으면 KB merge 강제 — 배포 후 기존 row 보강
-          existingActions.some((a) => !a.type || a.type === 'unknown' || !a.why));
+
+      // non-safe 계정은 매 분석마다 KB merge — enrich 스크립트/특정 메일함에 의존하지 않도록 일반화
+      const shouldRefreshActions = riskLevel !== 'safe' && Boolean(primaryRiskType);
 
       if (shouldRefreshActions) {
-        const kbSteps = getKbSteps(primaryRiskType);
-        const existingByType = new Map(existingActions.map((a) => [a.type, a]));
+        const plan = planKbActionMerge(existingActions, primaryRiskType, registry);
 
-        for (const [i, kb] of kbSteps.entries()) {
-          const existing = existingByType.get(kb.stepType);
-          const regForKb = registry
-            ? {
-                officialUrl: registry.officialUrl ?? undefined,
-                passwordUrl: registry.passwordUrl ?? undefined,
-                securityUrl: registry.securityUrl ?? undefined,
-              }
-            : null;
-          const officialUrl = resolveKbUrl(regForKb, kb.officialUrlKind ?? null);
-
-          if (existing) {
-            // KB merge — type/why/title 보강, done 상태는 건드리지 않음
-            await this.prisma.actionItem.update({
-              where: { id: existing.id },
-              data: {
-                type: kb.stepType,
-                title: kb.title,
-                why: kb.why ?? null,
-                description: existing.description ?? kb.subtitle ?? null,
-                isRequired: kb.required,
-                externalUrl: officialUrl ?? existing.externalUrl ?? null,
-                order: i,
-              },
-            });
-            existingByType.delete(kb.stepType);
-          } else {
-            await this.prisma.actionItem.create({
-              data: {
-                serviceAccountId: sa.id,
-                type: kb.stepType,
-                title: kb.title,
-                description: kb.subtitle ?? null,
-                why: kb.why ?? null,
-                isRequired: kb.required,
-                externalUrl: officialUrl ?? null,
-                order: i,
-                status: 'pending',
-              },
-            });
-          }
+        for (const u of plan.updates) {
+          await this.prisma.actionItem.update({
+            where: { id: u.id },
+            data: {
+              type: u.type,
+              title: u.title,
+              why: u.why,
+              description: u.description,
+              isRequired: u.isRequired,
+              externalUrl: u.externalUrl,
+              order: u.order,
+            },
+          });
         }
 
-        // KB merge 후 existingByType에 남은 항목 = 현재 riskType KB에 없는 구 step
-        // done 항목은 이력 보존, 나머지는 skipped 처리하여 2-3 조치 목록에서 제외
-        for (const [, staleItem] of existingByType.entries()) {
-          if (staleItem.status !== 'done') {
-            await this.prisma.actionItem.update({
-              where: { id: staleItem.id },
-              data: { status: 'skipped' },
-            });
-          }
+        for (const c of plan.creates) {
+          await this.prisma.actionItem.create({
+            data: {
+              serviceAccountId: sa.id,
+              type: c.type,
+              title: c.title,
+              description: c.description,
+              why: c.why,
+              isRequired: c.isRequired,
+              externalUrl: c.externalUrl,
+              order: c.order,
+              status: c.status,
+            },
+          });
+        }
+
+        if (plan.skipIds.length > 0) {
+          await this.prisma.actionItem.updateMany({
+            where: { id: { in: plan.skipIds } },
+            data: { status: 'skipped' },
+          });
         }
       }
     }

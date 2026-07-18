@@ -5,7 +5,14 @@ import { Prisma } from '@prisma/client';
 import { firstValueFrom } from 'rxjs';
 import { PrismaService } from '../../prisma/prisma.service';
 import { resolveService, cleanServiceName } from '../../common/registry/service-registry';
-import { ACTION_KB, ActionKbEntry, resolveKbUrl, getKbSteps } from '../policy/action-kb';
+import {
+  ActionKbEntry,
+  resolveKbUrl,
+  matchKbEntry,
+  resolveStepHelp,
+  noOfficialLinkGuidance,
+  planKbActionMerge,
+} from '../policy/action-kb';
 import { assertNoSensitiveData } from '../../common/sanitize/secret-detector';
 
 // ─── 내부 타입 ────────────────────────────────────────────────────────────────
@@ -107,24 +114,37 @@ function buildExternalCard(
   };
 }
 
-function buildActionStepDto(item: DbActionItem, displayName: string, registry: ReturnType<typeof resolveService> | null) {
+function resolveItemKb(
+  item: { type?: string | null; title?: string | null },
+  riskType: string | null,
+): ActionKbEntry | null {
+  return matchKbEntry(riskType, item);
+}
+
+function buildActionStepDto(
+  item: DbActionItem,
+  displayName: string,
+  registry: ReturnType<typeof resolveService> | null,
+  riskType: string | null = null,
+) {
   const selectable = item.status === 'pending' || item.status === 'failed';
-  const kbEntry = Object.values(ACTION_KB).flat().find((k) => k.stepType === item.type);
+  const kbEntry = resolveItemKb(item, riskType);
+  const card = buildExternalCard(item, displayName, registry, kbEntry?.officialUrlKind);
   return {
     id: item.id,
-    type: item.type,
+    type: item.type !== 'unknown' ? item.type : (kbEntry?.stepType ?? item.type),
     title: item.title,
     subtitle: item.description ?? null,
     description: item.description ?? null,
-    why: item.why ?? null,
+    why: item.why ?? kbEntry?.why ?? null,
     status: item.status,
     required: item.isRequired,
     isRequired: item.isRequired,
     order: item.order,
     selectable,
-    externalCard: buildExternalCard(item, displayName, registry, kbEntry?.officialUrlKind),
-    externalUrl: item.externalUrl ?? null,
-    officialUrl: item.externalUrl ?? null,
+    externalCard: card,
+    externalUrl: card?.url ?? item.externalUrl ?? null,
+    officialUrl: card?.url ?? item.externalUrl ?? null,
   };
 }
 
@@ -262,12 +282,15 @@ export class ActionAssistantService {
       return this.buildSessionResponse(existing, chronologicalMessages(existing.messages), sa);
     }
 
+    // 세션 시작 전 KB merge — 분석 없이도 unknown/type/why/URL 보강 (enrich 스크립트 비의존)
+    await this.ensureKbMergedItems(serviceAccountId, sa.primaryRiskType, sa.serviceName);
+
     const items = await this.loadItems(serviceAccountId);
 
     // 조치 항목이 없으면 세션 생성 불가 (분석 미완료)
     if (items.length === 0) throw new BadRequestException('조치 항목이 아직 없습니다. 분석 완료 후 시도해주세요.');
     const registry = resolveService(sa.serviceName);
-    const displayName = cleanServiceName(sa.serviceName);
+    const displayName = sa.displayName ?? cleanServiceName(sa.serviceName);
 
     const firstRequired = items.find((i) => i.isRequired && (i.status === 'pending' || i.status === 'failed'));
 
@@ -293,7 +316,7 @@ export class ActionAssistantService {
     // 3. bootstrap: 첫 required 조치 자동 선택 — user_chip + 조치 메시지 시퀀스
     if (bootstrapFirstAction && firstRequired) {
       messages.push({ role: 'user', type: 'user_chip', content: firstRequired.title });
-      this.appendActionMessages(messages, firstRequired, displayName, registry, items);
+      this.appendActionMessages(messages, firstRequired, displayName, registry, items, sa.primaryRiskType);
     }
 
     // DB에 세션 + 메시지 저장
@@ -362,8 +385,8 @@ export class ActionAssistantService {
     if (session.status !== 'active') throw new BadRequestException('이미 완료된 세션입니다.');
 
     const items = await this.loadItems(serviceAccountId);
-    const registry = resolveService(sa.serviceName);
-    const displayName = cleanServiceName(sa.serviceName);
+    const registry = resolveService(sa.serviceName, sa.displayName);
+    const displayName = sa.displayName ?? cleanServiceName(sa.serviceName);
 
     let userMessage: ReturnType<typeof buildMessageDto> | null = null;
     const newAssistantMessages: typeof items[0][] = []; // 타입 재사용 회피용 — 아래서 직접 생성
@@ -389,7 +412,7 @@ export class ActionAssistantService {
       });
       userMessage = buildMessageDto(userMsg);
 
-      this.appendActionMessages(assistantMsgs, item, displayName, registry, items);
+      this.appendActionMessages(assistantMsgs, item, displayName, registry, items, sa.primaryRiskType);
 
       sessionPatch = { activeActionItemId: item.id, feedbackEnabled: true, composerEnabled: false, composerPlaceholder: null };
 
@@ -545,13 +568,22 @@ export class ActionAssistantService {
         }),
       ]);
 
-      // KB help 메시지
-      const kbEntry = getKbSteps(sa.primaryRiskType).find((k) => k.stepType === item.type);
-      const helpText = kbEntry?.help ?? item.description ?? '아래 링크로 다시 시도해보세요!';
+      // KB help — type unknown이어도 title 매칭 + 현재 서비스 경로만 노출
+      const kbEntry = matchKbEntry(sa.primaryRiskType, item);
+      const linkProbe = kbEntry
+        ? buildExternalCard(item, displayName, registry, kbEntry.officialUrlKind)
+        : buildExternalCard(item, displayName, registry, null);
+      const helpText = kbEntry
+        ? resolveStepHelp(kbEntry, {
+            displayName,
+            hasOfficialUrl: !!linkProbe?.url,
+          })
+        : (item.description ??
+          `${displayName} 공식 사이트 설정·보안 메뉴에서 「${item.title}」을(를) 찾아 다시 시도해 보세요.`);
       assistantMsgs.push({ role: 'assistant', type: 'text', content: helpText });
 
       // URL 재제시 + tip + feedback
-      this.appendActionMessages(assistantMsgs, item, displayName, registry, items);
+      this.appendActionMessages(assistantMsgs, item, displayName, registry, items, sa.primaryRiskType);
 
       sessionPatch = { composerEnabled: false, composerPlaceholder: null, feedbackEnabled: true, activeActionItemId: item.id };
 
@@ -617,7 +649,9 @@ export class ActionAssistantService {
       progress,
       userMessage,
       assistantMessages: savedAssistant.map(buildMessageDto),
-      recommendedActions: finalItems.map((i) => buildActionStepDto(i, displayName, registry)),
+      recommendedActions: finalItems.map((i) =>
+        buildActionStepDto(i, displayName, registry, sa.primaryRiskType),
+      ),
       completion,
     };
   }
@@ -630,17 +664,24 @@ export class ActionAssistantService {
     displayName: string,
     registry: ReturnType<typeof resolveService> | null,
     items: DbActionItem[],
+    riskType: string | null = null,
   ) {
-    const kbForItem = Object.values(ACTION_KB).flat().find((k) => k.stepType === item.type);
+    const kbForItem = matchKbEntry(riskType, item);
     const card = buildExternalCard(item, displayName, registry, kbForItem?.officialUrlKind);
 
-    // official_link — card가 있을 때만 push
+    // official_link — URL 있으면 카드, 없으면 일반화 안내 텍스트 (registry 밖 SA 대응)
     if (card) {
       messages.push({
         role: 'assistant',
         type: 'official_link',
         content: `${item.title} 페이지로 바로 이동할 수 있어요!`,
         metadata: { externalCard: card },
+      });
+    } else {
+      messages.push({
+        role: 'assistant',
+        type: 'text',
+        content: noOfficialLinkGuidance(displayName, item.title),
       });
     }
 
@@ -681,8 +722,8 @@ export class ActionAssistantService {
     sa: Awaited<ReturnType<typeof this.loadSa>>,
   ) {
     const items = await this.loadItems(session.serviceAccountId);
-    const registry = resolveService(sa.serviceName);
-    const displayName = cleanServiceName(sa.serviceName);
+    const registry = resolveService(sa.serviceName, sa.displayName);
+    const displayName = sa.displayName ?? cleanServiceName(sa.serviceName);
     const progress = calcProgress(items);
 
     const riskLevelMap: Record<string, string> = { high: '위험', medium: '주의', low: '낮음', safe: '안전' };
@@ -733,7 +774,9 @@ export class ActionAssistantService {
         title: sa.headline ?? `${displayName} 계정 보안 위험 감지`,
         description: sa.summary ?? sa.interpretation ?? `${riskLevelMap[sa.riskLevel] ?? ''} 등급 보안 조치가 필요해요.`,
       },
-      recommendedActions: items.map((i) => buildActionStepDto(i, displayName, registry)),
+      recommendedActions: items.map((i) =>
+        buildActionStepDto(i, displayName, registry, sa.primaryRiskType),
+      ),
       messages: messages.map(buildMessageDto),
       completion,
     };
@@ -760,6 +803,77 @@ export class ActionAssistantService {
       where: { serviceAccountId },
       orderBy: { order: 'asc' },
     });
+  }
+
+  /**
+   * 세션 생성 직전 KB merge.
+   * analysis 재실행 없이도 type/why/URL을 보강해 cold·unknown 데이터를 일반화한다.
+   */
+  private async ensureKbMergedItems(
+    serviceAccountId: string,
+    primaryRiskType: string | null,
+    serviceName: string,
+  ) {
+    if (!primaryRiskType) return;
+    const existing = await this.loadItems(serviceAccountId);
+    // 이미 충분히 보강됐으면 스킵 (done 제외 전부 type 유효 + why 있음)
+    const open = existing.filter((a) => a.status !== 'done' && a.status !== 'skipped');
+    const needs =
+      open.length === 0 ||
+      open.some((a) => !a.type || a.type === 'unknown' || !a.why);
+    // URL 없는 password 스텝도 registry 재적용
+    const registry = resolveService(serviceName);
+    const plan = planKbActionMerge(existing, primaryRiskType, registry);
+    if (!needs && plan.creates.length === 0 && plan.skipIds.length === 0) {
+      // 그래도 externalUrl 보강 가능한 update는 적용
+      const urlOnly = plan.updates.filter((u) => {
+        const prev = existing.find((e) => e.id === u.id);
+        return prev && !prev.externalUrl && u.externalUrl;
+      });
+      for (const u of urlOnly) {
+        await this.prisma.actionItem.update({
+          where: { id: u.id },
+          data: { externalUrl: u.externalUrl },
+        });
+      }
+      return;
+    }
+
+    for (const u of plan.updates) {
+      await this.prisma.actionItem.update({
+        where: { id: u.id },
+        data: {
+          type: u.type,
+          title: u.title,
+          why: u.why,
+          description: u.description,
+          isRequired: u.isRequired,
+          externalUrl: u.externalUrl,
+          order: u.order,
+        },
+      });
+    }
+    for (const c of plan.creates) {
+      await this.prisma.actionItem.create({
+        data: {
+          serviceAccountId,
+          type: c.type,
+          title: c.title,
+          description: c.description,
+          why: c.why,
+          isRequired: c.isRequired,
+          externalUrl: c.externalUrl,
+          order: c.order,
+          status: c.status,
+        },
+      });
+    }
+    if (plan.skipIds.length > 0) {
+      await this.prisma.actionItem.updateMany({
+        where: { id: { in: plan.skipIds } },
+        data: { status: 'skipped' },
+      });
+    }
   }
 
   private async invalidateSnapshot(userId: string) {
