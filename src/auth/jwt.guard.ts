@@ -8,15 +8,23 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { Request } from 'express';
+import { PrismaService } from '../prisma/prisma.service';
+
+export type AuthUser = {
+  sub: string;
+  email?: string;
+  jti?: string;
+};
 
 @Injectable()
 export class JwtGuard implements CanActivate {
   constructor(
     private readonly jwtService: JwtService,
     private readonly config: ConfigService,
+    private readonly prisma: PrismaService,
   ) {}
 
-  canActivate(context: ExecutionContext): boolean {
+  async canActivate(context: ExecutionContext): Promise<boolean> {
     const req = context.switchToHttp().getRequest<Request>();
     const authHeader = req.headers.authorization;
 
@@ -34,11 +42,27 @@ export class JwtGuard implements CanActivate {
       this.assertTrustedBrowserOrigin(req);
     }
 
+    let payload: AuthUser;
     try {
-      req['user'] = this.jwtService.verify(token);
+      payload = this.jwtService.verify(token) as AuthUser;
     } catch {
       throw new UnauthorizedException('유효하지 않은 토큰입니다.');
     }
+
+    if (!payload?.sub) {
+      throw new UnauthorizedException('유효하지 않은 토큰입니다.');
+    }
+
+    // 팬텀 JWT 차단 — DB에 존재하는 유저만 허용
+    const user = await this.prisma.user.findUnique({
+      where: { id: payload.sub },
+      select: { id: true },
+    });
+    if (!user) {
+      throw new UnauthorizedException('유효하지 않은 세션입니다. 다시 로그인해 주세요.');
+    }
+
+    req['user'] = payload;
     return true;
   }
 
