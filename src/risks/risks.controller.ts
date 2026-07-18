@@ -6,6 +6,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   Req,
   UseGuards,
 } from '@nestjs/common';
@@ -15,36 +16,70 @@ import {
   ApiOperation,
   ApiParam,
   ApiProperty,
+  ApiQuery,
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
-import { IsArray, IsEnum, IsOptional, IsString } from 'class-validator';
+import {
+  IsBoolean,
+  IsEnum,
+  IsIn,
+  IsOptional,
+  IsString,
+  MaxLength,
+} from 'class-validator';
 import { RisksService } from './risks.service';
+import { ActionAssistantService } from './assistant/action-assistant.service';
 import { JwtGuard } from '../auth/jwt.guard';
 
-class UpdateActionStatusDto {
-  @ApiProperty({
-    enum: ['resolved', 'skipped', 'pending'],
-    example: 'resolved',
-  })
-  @IsEnum(['resolved', 'skipped', 'pending'])
-  status: 'resolved' | 'skipped' | 'pending';
-
-  @ApiProperty({
-    example: ['action-item-id-1', 'action-item-id-2'],
-    required: false,
-  })
-  @IsArray()
-  @IsString({ each: true })
+class CreateSessionDto {
+  @ApiProperty({ required: false, default: true })
+  @IsBoolean()
   @IsOptional()
-  completedStepIds?: string[];
+  bootstrapFirstAction?: boolean;
+}
+
+class SendMessageDto {
+  @ApiProperty({ example: 'session-uuid' })
+  @IsString()
+  sessionId: string;
+
+  @ApiProperty({ enum: ['action_select', 'user_text', 'feedback', 'failure_reason'] })
+  @IsEnum(['action_select', 'user_text', 'feedback', 'failure_reason'])
+  type: 'action_select' | 'user_text' | 'feedback' | 'failure_reason';
+
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
+  actionItemId?: string;
+
+  @ApiProperty({ required: false })
+  @IsString()
+  @MaxLength(1000)
+  @IsOptional()
+  message?: string;
+
+  @ApiProperty({ enum: ['completed', 'failed'], required: false })
+  @IsIn(['completed', 'failed'])
+  @IsOptional()
+  feedbackValue?: 'completed' | 'failed';
+
+  @ApiProperty({ required: false, example: 'cannot_find_page' })
+  @IsString()
+  @IsOptional()
+  reasonCategory?: string;
 }
 
 @ApiBearerAuth('access-token')
 @UseGuards(JwtGuard)
 @Controller('service-accounts')
 export class RisksController {
-  constructor(private readonly risksService: RisksService) {}
+  constructor(
+    private readonly risksService: RisksService,
+    private readonly actionAssistantService: ActionAssistantService,
+  ) {}
+
+  // ── 계정 상세 ─────────────────────────────────────────────────────────────────
 
   @Get(':serviceAccountId')
   @ApiTags('2-3. 계정 상세 · 보안 조치')
@@ -54,10 +89,11 @@ export class RisksController {
 
 **응답 포함 항목**
 - \`status\`, \`riskLevel\`, \`headline\`, \`summary\`, \`interpretation\`
-- \`evidences[]\`: 위험 판단 근거 이메일 목록
-- \`actionGuide\`: 조치 가이드 및 단계별 체크리스트
-
-\`evidenceHash\` 기준으로 동일 근거는 중복 저장하지 않으며, 메일 본문은 저장하지 않습니다.`,
+- \`recentEvents[]\`: 위험 판단 근거 이메일 목록 (최근 5건)
+- \`actionItems[]\`: KB 기반 조치 항목 (type, why, subtitle 포함)
+- \`primaryCta\`: 첫 번째 필수 pending 조치 (CTA 버튼용)
+- \`activeSessionId\`: 현재 활성 보안도우미 세션 ID (없으면 null)
+- \`actionGuide\`: 하위 호환 유지 (구 API)`,
   })
   @ApiParam({ name: 'serviceAccountId' })
   @ApiResponse({ status: 200, description: '서비스 계정 상세 정보' })
@@ -66,59 +102,31 @@ export class RisksController {
     return this.risksService.getServiceDetail(id, req.user.sub);
   }
 
-  @Patch(':serviceAccountId/action-status')
-  @Post(':serviceAccountId/action-status') // 하위 호환
+  // ── 건너뛰기 ──────────────────────────────────────────────────────────────────
+
+  @Patch(':serviceAccountId/skip')
+  @Post(':serviceAccountId/skip')
   @HttpCode(200)
   @ApiTags('2-3. 계정 상세 · 보안 조치')
-  @ApiOperation({
-    summary: '조치 상태 저장 — resolved / skipped / pending',
-    description: `보안 조치 결과를 저장합니다. (\`PATCH\` 권장, \`POST\` 하위 호환)
-
-- \`resolved\`: 조치 완료 — 계정 상태가 \`resolved\`로 변경됨
-- \`skipped\`: 건너뜀 — 계정 상태가 \`skipped\`로 변경되고 홈 조치 대상에서 제외됨
-- \`pending\`: 미완료 상태로 되돌림 — 위험도에 따라 \`action_required\` 또는 \`watch\`로 복원
-- \`completedStepIds\`: 완료한 체크리스트 항목 ID 배열 (선택)`,
-  })
+  @ApiOperation({ summary: '조치 건너뛰기 — skipped 처리' })
   @ApiParam({ name: 'serviceAccountId' })
-  @ApiBody({ type: UpdateActionStatusDto })
-  @ApiResponse({
-    status: 200,
-    description: '조치 상태 저장됨',
-    schema: {
-      example: {
-        serviceAccountId: 'sa-uuid',
-        status: 'resolved',
-        resolvedAt: '2026-07-17T00:00:00.000Z',
-        homeDelta: { actionRequiredCount: 2, securityScore: 78 },
-      },
-    },
-  })
-  @ApiResponse({ status: 404, description: '서비스를 찾을 수 없음' })
-  updateStatus(
-    @Req() req,
-    @Param('serviceAccountId') id: string,
-    @Body() body: UpdateActionStatusDto,
-  ) {
-    return this.risksService.updateActionStatus(id, req.user.sub, body);
+  @ApiResponse({ status: 200, schema: { example: { serviceAccountId: 'uuid', status: 'skipped' } } })
+  skipAccount(@Req() req, @Param('serviceAccountId') id: string) {
+    return this.risksService.skipAccount(id, req.user.sub);
   }
 
+  // ── 숨기기 / 복원 ─────────────────────────────────────────────────────────────
+
   @Patch(':serviceAccountId/dormant')
-  @Post(':serviceAccountId/dormant') // 하위 호환
+  @Post(':serviceAccountId/dormant')
   @HttpCode(200)
   @ApiTags('2-1. 홈 화면')
   @ApiOperation({
     summary: '계정 숨기기 — 홈에서 숨기고 휴면 계정으로 전환',
-    description: `서비스 계정을 휴면 상태(\`dormant\`)로 전환합니다. (\`PATCH\` 권장, \`POST\` 하위 호환)
-
-휴면 계정은 홈 카드 목록에서 제외되며, 보안 점수 계산에서도 빠집니다.
-전환 시 기존 status가 \`previousStatus\`에 저장되어 복원 시 사용됩니다.`,
+    description: `서비스 계정을 휴면 상태(\`dormant\`)로 전환합니다.`,
   })
   @ApiParam({ name: 'serviceAccountId' })
-  @ApiResponse({
-    status: 200,
-    description: '휴면 전환 완료',
-    schema: { example: { serviceAccountId: 'sa-uuid', status: 'dormant' } },
-  })
+  @ApiResponse({ status: 200, schema: { example: { serviceAccountId: 'sa-uuid', status: 'dormant' } } })
   @ApiResponse({ status: 404, description: '서비스를 찾을 수 없음' })
   setDormant(@Req() req, @Param('serviceAccountId') id: string) {
     return this.risksService.setDormant(id, req.user.sub);
@@ -127,20 +135,70 @@ export class RisksController {
   @Patch(':serviceAccountId/restore')
   @HttpCode(200)
   @ApiTags('4-1. 마이 화면')
-  @ApiOperation({
-    summary: '휴면 계정 복원 — 휴면 해제 후 이전 상태로 복원',
-    description: `휴면(\`dormant\`) 상태의 서비스 계정을 휴면 전 상태로 복원합니다.
-
-복원된 계정은 홈 카드 목록에 다시 표시되고 보안 점수 계산에 포함됩니다.`,
-  })
+  @ApiOperation({ summary: '휴면 계정 복원 — 휴면 해제 후 이전 상태로 복원' })
   @ApiParam({ name: 'serviceAccountId' })
-  @ApiResponse({
-    status: 200,
-    description: '복원 완료',
-    schema: { example: { serviceAccountId: 'sa-uuid', status: 'safe' } },
-  })
+  @ApiResponse({ status: 200, schema: { example: { serviceAccountId: 'sa-uuid', status: 'safe' } } })
   @ApiResponse({ status: 404, description: '서비스를 찾을 수 없음' })
   restoreDormant(@Req() req, @Param('serviceAccountId') id: string) {
     return this.risksService.restoreDormant(id, req.user.sub);
+  }
+
+  // ── 보안 도우미 세션 ──────────────────────────────────────────────────────────
+
+  @Get(':serviceAccountId/action-session')
+  @ApiTags('2-4. 보안 도우미')
+  @ApiOperation({
+    summary: '현재 보안도우미 세션 조회',
+    description: `active/completed 세션이 있으면 반환, 없으면 null 반환.`,
+  })
+  @ApiParam({ name: 'serviceAccountId' })
+  @ApiResponse({ status: 200, description: '세션 정보 또는 null' })
+  getSession(@Req() req, @Param('serviceAccountId') id: string) {
+    return this.actionAssistantService.getSession(id, req.user.sub);
+  }
+
+  @Post(':serviceAccountId/action-session')
+  @HttpCode(200)
+  @ApiTags('2-4. 보안 도우미')
+  @ApiOperation({
+    summary: '보안도우미 세션 생성 (또는 기존 세션 반환)',
+    description: `active 세션이 있으면 idempotent하게 반환합니다.
+\`bootstrapFirstAction=true\`(기본값) 시 첫 번째 필수 pending 조치를 자동으로 선택해서 초기 메시지를 생성합니다.`,
+  })
+  @ApiParam({ name: 'serviceAccountId' })
+  @ApiBody({ type: CreateSessionDto, required: false })
+  @ApiResponse({ status: 200, description: '세션 생성 또는 기존 세션 반환' })
+  createSession(
+    @Req() req,
+    @Param('serviceAccountId') id: string,
+    @Body() body: CreateSessionDto,
+  ) {
+    return this.actionAssistantService.createSession(
+      id,
+      req.user.sub,
+      body?.bootstrapFirstAction ?? true,
+    );
+  }
+
+  @Post(':serviceAccountId/action-session/messages')
+  @HttpCode(200)
+  @ApiTags('2-4. 보안 도우미')
+  @ApiOperation({
+    summary: '보안도우미 메시지 전송',
+    description: `**type 종류**
+- \`action_select\`: 조치 항목 선택 (actionItemId 필수)
+- \`user_text\`: 자유 텍스트 입력 (message 필수)
+- \`feedback\`: 조치 완료/실패 피드백 (feedbackValue 필수: \`completed\` | \`failed\`)
+- \`failure_reason\`: 실패 사유 입력 (message 필수, reasonCategory 선택)`,
+  })
+  @ApiParam({ name: 'serviceAccountId' })
+  @ApiBody({ type: SendMessageDto })
+  @ApiResponse({ status: 200, description: '메시지 처리 결과' })
+  sendMessage(
+    @Req() req,
+    @Param('serviceAccountId') id: string,
+    @Body() body: SendMessageDto,
+  ) {
+    return this.actionAssistantService.sendMessage(id, req.user.sub, body);
   }
 }

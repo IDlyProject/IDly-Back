@@ -101,10 +101,11 @@ model ServiceAccount {
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
-  gmailAccount  GmailAccount   @relation(fields: [gmailAccountId], references: [id], onDelete: Cascade)
-  analysisRun   AnalysisRun?   @relation(fields: [analysisRunId], references: [id])
-  riskEvidences RiskEvidence[]
-  actionItems   ActionItem[]
+  gmailAccount    GmailAccount    @relation(fields: [gmailAccountId], references: [id], onDelete: Cascade)
+  analysisRun     AnalysisRun?    @relation(fields: [analysisRunId], references: [id])
+  riskEvidences   RiskEvidence[]
+  actionItems     ActionItem[]
+  actionSessions  ActionSession[]
 
   @@unique([gmailAccountId, serviceName])
   @@index([gmailAccountId, status])
@@ -130,16 +131,65 @@ model RiskEvidence {
 model ActionItem {
   id               String   @id @default(uuid())
   serviceAccountId String
+  type             String   @default("unknown") // KB stepType: change_password | enable_2fa | ...
   title            String
   description      String?
+  why              String?
   isRequired       Boolean  @default(false)
   externalUrl      String?
   order            Int      @default(0)
-  status           String   @default("pending") // pending | done | skipped
+  status           String   @default("pending") // pending | done | failed | skipped
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
-  serviceAccount ServiceAccount @relation(fields: [serviceAccountId], references: [id], onDelete: Cascade)
+  serviceAccount ServiceAccount  @relation(fields: [serviceAccountId], references: [id], onDelete: Cascade)
+  attempts       ActionAttempt[]
+
+  @@index([serviceAccountId, status])
+}
+
+model ActionSession {
+  id                  String    @id @default(uuid())
+  serviceAccountId    String
+  status              String    @default("active") // active | completed | abandoned
+  activeActionItemId  String?
+  feedbackEnabled     Boolean   @default(false)
+  composerEnabled     Boolean   @default(false)
+  composerPlaceholder String?
+  startedAt           DateTime  @default(now())
+  completedAt         DateTime?
+  updatedAt           DateTime  @updatedAt
+
+  serviceAccount ServiceAccount  @relation(fields: [serviceAccountId], references: [id], onDelete: Cascade)
+  messages       ActionMessage[]
+  attempts       ActionAttempt[]
+
+  @@index([serviceAccountId, status])
+}
+
+model ActionMessage {
+  id        String   @id @default(uuid())
+  sessionId String
+  role      String   // assistant | user
+  type      String   // text | risk_intro | action_list | user_chip | official_link | tip | card_news | feedback_actions | celebration | exit_cta
+  content   String
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  session ActionSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+}
+
+model ActionAttempt {
+  id             String   @id @default(uuid())
+  sessionId      String
+  actionItemId   String
+  status         String   // completed | failed | skipped
+  reason         String?
+  reasonCategory String?  // cannot_find_page | login_failed | not_my_account | do_later | other
+  createdAt      DateTime @default(now())
+
+  session    ActionSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  actionItem ActionItem    @relation(fields: [actionItemId], references: [id], onDelete: Cascade)
 }
 
 model BetaApplicant {
