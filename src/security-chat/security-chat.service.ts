@@ -6,6 +6,7 @@ import { firstValueFrom } from 'rxjs';
 import { PrismaService } from '../prisma/prisma.service';
 import { resolveService, cleanServiceName } from '../common/registry/service-registry';
 import { ACTION_KB, getKbSteps } from '../risks/policy/action-kb';
+import { assertNoSensitiveData } from '../common/sanitize/secret-detector';
 
 // ─── 타입 ─────────────────────────────────────────────────────────────────────
 
@@ -97,6 +98,8 @@ export class SecurityChatService {
       .reverse()
       .filter((m) => m.role === 'user' || m.type === 'text')
       .map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content }));
+
+    assertNoSensitiveData(message);
 
     // 유저 메시지 저장
     const userMsg = await this.prisma.securityChatMessage.create({

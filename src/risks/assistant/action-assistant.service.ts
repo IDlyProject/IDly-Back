@@ -6,6 +6,7 @@ import { firstValueFrom } from 'rxjs';
 import { PrismaService } from '../../prisma/prisma.service';
 import { resolveService, cleanServiceName } from '../../common/registry/service-registry';
 import { ACTION_KB, ActionKbEntry, resolveKbUrl, getKbSteps } from '../policy/action-kb';
+import { assertNoSensitiveData } from '../../common/sanitize/secret-detector';
 
 // ─── 내부 타입 ────────────────────────────────────────────────────────────────
 
@@ -435,6 +436,7 @@ export class ActionAssistantService {
       if (!session.composerEnabled) throw new BadRequestException('실패 사유 입력 상태가 아닙니다.');
       const userText = (body.message ?? '').slice(0, 500);
       if (!userText) throw new BadRequestException('message 필수');
+      assertNoSensitiveData(userText);
 
       // body.actionItemId 무시 — activeActionItemId만 허용 (dynamic.html: 직전 "못했어요" 조치에만 사유 귀속)
       const targetId = session.activeActionItemId;

@@ -3,6 +3,7 @@ import { ApiBearerAuth, ApiBody, ApiOperation, ApiProperty, ApiResponse, ApiTags
 import { IsString, MaxLength } from 'class-validator';
 import { SecurityChatService } from './security-chat.service';
 import { JwtGuard } from '../auth/jwt.guard';
+import { PerUserThrottleGuard } from '../common/guards/per-user-throttle.guard';
 
 class SendSecurityChatDto {
   @ApiProperty({ example: '비밀번호 어떻게 바꿔요?' })
@@ -30,6 +31,7 @@ export class SecurityChatController {
 
   @Post('messages')
   @HttpCode(200)
+  @UseGuards(PerUserThrottleGuard)
   @ApiOperation({
     summary: '보안 도우미 메시지 전송',
     description: `자유 텍스트 메시지를 전송하면 LLM이 컨텍스트를 파악해 답변합니다.
