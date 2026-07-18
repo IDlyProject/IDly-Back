@@ -415,6 +415,7 @@ export class ActionAssistantService {
       }
 
     } else if (body.type === 'failure_reason') {
+      if (!session.composerEnabled) throw new BadRequestException('실패 사유 입력 상태가 아닙니다.');
       const userText = (body.message ?? '').slice(0, 500);
       if (!userText) throw new BadRequestException('message 필수');
 
@@ -451,7 +452,8 @@ export class ActionAssistantService {
       sessionPatch = { composerEnabled: false, composerPlaceholder: null, feedbackEnabled: true, activeActionItemId: item.id };
 
     } else {
-      // user_text — Light RAG chatbot
+      // user_text — Light RAG chatbot (composerEnabled=true 상태에서만 허용)
+      if (!session.composerEnabled) throw new BadRequestException('텍스트 입력이 비활성화된 상태입니다.');
       const userText = (body.message ?? '').slice(0, 1000).trim();
       if (!userText) throw new BadRequestException('message 필수');
 
@@ -535,7 +537,10 @@ export class ActionAssistantService {
         });
       }
 
-      sessionPatch = {};
+      // showFeedback이면 feedback 대기 상태로, 아니면 composer 열린 채 유지
+      sessionPatch = solarResult.showFeedback && activeItem
+        ? { feedbackEnabled: true, composerEnabled: false, composerPlaceholder: null }
+        : {};
     }
 
     // assistant 메시지 일괄 저장

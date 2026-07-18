@@ -334,12 +334,25 @@ showExitCta: 대화를 마무리하거나 다른 페이지로 안내할 때 true
       const validSaIds = new Set(allSa.map((s) => s.id));
       const targetSaId = typeof raw.targetSaId === 'string' && validSaIds.has(raw.targetSaId) ? raw.targetSaId : null;
 
+      // actionType을 해당 SA의 실제 KB stepType으로 허용 목록 검증
+      let actionType: string | null = null;
+      if (typeof raw.actionType === 'string' && targetSaId) {
+        const targetSa = allSa.find((s) => s.id === targetSaId);
+        if (targetSa) {
+          const validTypes = new Set([
+            ...getKbSteps(targetSa.primaryRiskType).map((k) => k.stepType),
+            ...targetSa.actionItems.map((a) => a.type),
+          ]);
+          actionType = validTypes.has(raw.actionType) ? raw.actionType : null;
+        }
+      }
+
       return {
         reply: typeof raw.reply === 'string' && raw.reply.trim() ? raw.reply.trim() : '보안 관련 궁금한 점이 있으시면 공식 사이트를 확인해보세요.',
         showActionList: raw.showActionList === true,
         showLink: raw.showLink === true && !!targetSaId,
         targetSaId,
-        actionType: typeof raw.actionType === 'string' ? raw.actionType : null,
+        actionType,
         showExitCta: raw.showExitCta === true,
       };
     } catch (err) {

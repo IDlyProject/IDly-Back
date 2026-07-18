@@ -55,7 +55,7 @@ class SendMessageDto {
 
   @ApiProperty({ required: false })
   @IsString()
-  @MaxLength(1000)
+  @MaxLength(500)
   @IsOptional()
   message?: string;
 
