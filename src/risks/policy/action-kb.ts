@@ -1,3 +1,5 @@
+import { resolveService } from '../../common/registry/service-registry';
+
 export interface ActionKbEntry {
   stepType: string;
   priority: number;
@@ -395,41 +397,11 @@ export function getKbSteps(riskType: string | null): ActionKbEntry[] {
   return ACTION_KB[riskType ?? ''] ?? ACTION_KB['security_recommendation'] ?? [];
 }
 
-/** displayName / serviceName → SERVICE_STEP_PATHS 키 */
+/** displayName / serviceName → SERVICE_STEP_PATHS 키 (service-registry를 단일 진실 출처로 사용) */
 export function normalizeServiceKey(name: string | null | undefined): string | null {
   if (!name?.trim()) return null;
-  const raw = name.trim();
-  const n = raw.toLowerCase();
-  if (n.includes('google') || n === 'gmail') return 'Google';
-  if (n.includes('youtube') || n.includes('유튜브')) return 'YouTube';
-  if (n.includes('amazon') || n.includes('아마존')) return 'Amazon';
-  if (n.includes('twitter') || n.includes('트위터') || n === 'x' || /\bx\b/.test(n)) return 'Twitter';
-  if (n.includes('kakao') || n.includes('카카오')) return 'Kakao';
-  if (n.includes('naver') || n.includes('네이버')) return 'Naver';
-  if (n.includes('netflix') || n.includes('넷플릭스')) return 'Netflix';
-  if (n.includes('microsoft') || n.includes('outlook') || n.includes('hotmail') || n.includes('xbox')) return 'Microsoft';
-  if (n.includes('사람인') || n.includes('saramin')) return '사람인';
-  if (n.includes('coupang') || n.includes('쿠팡')) return 'Coupang';
-  if (n.includes('apple') || n.includes('icloud') || n.includes('애플')) return 'Apple';
-  if (n.includes('discord') || n.includes('디스코드')) return 'Discord';
-  if (n.includes('notion') || n.includes('노션')) return 'Notion';
-  if (n.includes('slack') || n.includes('슬랙')) return 'Slack';
-  if (n.includes('github') || n.includes('깃허브')) return 'GitHub';
-  if (n.includes('instagram') || n.includes('인스타')) return 'Instagram';
-  if (n.includes('facebook') || n.includes('페이스북') || n.includes('meta')) return 'Facebook';
-  if (n.includes('linkedin') || n.includes('링크드인')) return 'LinkedIn';
-  if (n.includes('spotify') || n.includes('스포티파이')) return 'Spotify';
-  if (n.includes('steam') || n.includes('스팀')) return 'Steam';
-  if (n.includes('twitch') || n.includes('트위치')) return 'Twitch';
-  if (n.includes('dropbox') || n.includes('드롭박스')) return 'Dropbox';
-  if (n.includes('zoom') || n.includes('줌')) return 'Zoom';
-  if (n.includes('paypal') || n.includes('페이팔')) return 'PayPal';
-  if (n.includes('reddit') || n.includes('레딧')) return 'Reddit';
-  if (n.includes('disney')) return 'Disney+';
-  if (n.includes('toss') || n.includes('토스')) return 'Toss';
-  if (n.includes('line') || n.includes('라인')) return 'LINE';
-  // exact key fallback (SERVICE_REGISTRY.serviceName과 동일하면 그대로)
-  return raw;
+  const hit = resolveService(name);
+  return hit.fromRegistry ? hit.serviceName : name.trim();
 }
 
 /**
@@ -581,10 +553,10 @@ export function planKbActionMerge(
 
   const byType = new Map<string, MergeableActionItem[]>();
   for (const a of existing) {
-    const key = a.type && a.type !== 'unknown' ? a.type : `__unknown__${a.id}`;
-    const list = byType.get(a.type && a.type !== 'unknown' ? a.type : '__unknown__') ?? [];
+    const bucket = a.type && a.type !== 'unknown' ? a.type : '__unknown__';
+    const list = byType.get(bucket) ?? [];
     list.push(a);
-    byType.set(a.type && a.type !== 'unknown' ? a.type : '__unknown__', list);
+    byType.set(bucket, list);
   }
 
   const takeByType = (stepType: string): MergeableActionItem | null => {

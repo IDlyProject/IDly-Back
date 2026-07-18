@@ -818,9 +818,7 @@ export class ActionAssistantService {
     const existing = await this.loadItems(serviceAccountId);
     // 이미 충분히 보강됐으면 스킵 (done 제외 전부 type 유효 + why 있음)
     const open = existing.filter((a) => a.status !== 'done' && a.status !== 'skipped');
-    const needs =
-      open.length === 0 ||
-      open.some((a) => !a.type || a.type === 'unknown' || !a.why);
+    const needs = open.some((a) => !a.type || a.type === 'unknown' || !a.why);
     // URL 없는 password 스텝도 registry 재적용
     const registry = resolveService(serviceName);
     const plan = planKbActionMerge(existing, primaryRiskType, registry);
