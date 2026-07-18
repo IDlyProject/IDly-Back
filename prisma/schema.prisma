@@ -166,6 +166,8 @@ model ActionSession {
   attempts       ActionAttempt[]
 
   @@index([serviceAccountId, status])
+  // Partial unique: 서비스 계정당 active 세션 1개 — SQL migration에서 생성
+  // CREATE UNIQUE INDEX "ActionSession_one_active_per_sa" ON "ActionSession"("serviceAccountId") WHERE status = 'active';
 }
 
 model ActionMessage {

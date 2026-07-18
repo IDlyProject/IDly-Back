@@ -8,17 +8,17 @@ interface BucketEntry {
 /**
  * Per-user in-memory rate limiter.
  * Suitable for single-instance deployments (Render).
+ *
+ * Note: no constructor DI params — Nest `@UseGuards(PerUserThrottleGuard)` resolves
+ * the class via DI, and numeric constructor args would fail injection.
  */
 @Injectable()
 export class PerUserThrottleGuard implements CanActivate {
   private readonly buckets = new Map<string, BucketEntry>();
-  private readonly limit: number;
-  private readonly windowMs: number;
-
-  constructor(limit = 10, windowMs = 60_000) {
-    this.limit = limit;
-    this.windowMs = windowMs;
-  }
+  /** Max requests per user per window */
+  private readonly limit = 10;
+  /** Sliding window length in ms */
+  private readonly windowMs = 60_000;
 
   canActivate(ctx: ExecutionContext): boolean {
     const req = ctx.switchToHttp().getRequest();

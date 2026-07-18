@@ -138,6 +138,24 @@ function calcProgress(items: DbActionItem[]) {
   return { doneCount, totalRequired, label };
 }
 
+/** 최근 N개만 로드 — orderBy desc + take 후 시간순 복원 (asc+take는 오래된 쪽만 반환하는 버그) */
+const SESSION_MESSAGE_LIMIT = 100;
+
+const sessionMessagesInclude = {
+  messages: {
+    orderBy: { createdAt: 'desc' as const },
+    take: SESSION_MESSAGE_LIMIT,
+  },
+};
+
+function chronologicalMessages<T extends { createdAt: Date }>(messages: T[]): T[] {
+  return [...messages].reverse();
+}
+
+function isUniqueViolation(err: unknown): boolean {
+  return err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002';
+}
+
 // ─── Service ──────────────────────────────────────────────────────────────────
 
 @Injectable()
@@ -162,12 +180,12 @@ export class ActionAssistantService {
         status: { in: ['active', 'completed'] },
       },
       orderBy: [{ status: 'asc' }, { startedAt: 'desc' }], // active 우선
-      include: { messages: { orderBy: { createdAt: 'asc' }, take: 100 } },
+      include: sessionMessagesInclude,
     });
 
     if (!session) return null;
 
-    return this.buildSessionResponse(session, session.messages, sa);
+    return this.buildSessionResponse(session, chronologicalMessages(session.messages), sa);
   }
 
   // ── 세션 생성 ────────────────────────────────────────────────────────────────
@@ -185,18 +203,23 @@ export class ActionAssistantService {
       const lastCompleted = await this.prisma.actionSession.findFirst({
         where: { serviceAccountId, status: 'completed' },
         orderBy: { completedAt: 'desc' },
-        include: { messages: { orderBy: { createdAt: 'asc' }, take: 100 } },
+        include: sessionMessagesInclude,
       });
-      if (lastCompleted) return this.buildSessionResponse(lastCompleted, lastCompleted.messages, sa);
+      if (lastCompleted) {
+        return this.buildSessionResponse(
+          lastCompleted,
+          chronologicalMessages(lastCompleted.messages),
+          sa,
+        );
+      }
       throw new BadRequestException('보안 조치가 필요하지 않은 계정입니다.');
     }
 
     // 기존 active 있으면 idempotent 반환
-    const existing = await this.prisma.actionSession.findFirst({
-      where: { serviceAccountId, status: 'active' },
-      include: { messages: { orderBy: { createdAt: 'asc' }, take: 100 } },
-    });
-    if (existing) return this.buildSessionResponse(existing, existing.messages, sa);
+    const existing = await this.findActiveSession(serviceAccountId);
+    if (existing) {
+      return this.buildSessionResponse(existing, chronologicalMessages(existing.messages), sa);
+    }
 
     const items = await this.loadItems(serviceAccountId);
 
@@ -206,7 +229,6 @@ export class ActionAssistantService {
     const displayName = cleanServiceName(sa.serviceName);
 
     const firstRequired = items.find((i) => i.isRequired && (i.status === 'pending' || i.status === 'failed'));
-    const progress = calcProgress(items);
 
     // 메시지 빌드
     const messages: { role: string; type: string; content: string; metadata?: ActionMessageMeta }[] = [];
@@ -234,27 +256,45 @@ export class ActionAssistantService {
     }
 
     // DB에 세션 + 메시지 저장
-    const session = await this.prisma.actionSession.create({
-      data: {
-        serviceAccountId,
-        status: 'active',
-        activeActionItemId: firstRequired?.id ?? null,
-        feedbackEnabled: bootstrapFirstAction && !!firstRequired,
-        composerEnabled: false,
-        composerPlaceholder: null,
-        messages: {
-          create: messages.map((m) => ({
-            role: m.role,
-            type: m.type,
-            content: m.content,
-            metadata: m.metadata ? (m.metadata as unknown as Prisma.InputJsonValue) : Prisma.JsonNull,
-          })),
+    // partial unique index(ActionSession_one_active_per_sa) + P2002 재조회로 동시 create 레이스 방어
+    try {
+      const session = await this.prisma.actionSession.create({
+        data: {
+          serviceAccountId,
+          status: 'active',
+          activeActionItemId: firstRequired?.id ?? null,
+          feedbackEnabled: bootstrapFirstAction && !!firstRequired,
+          composerEnabled: false,
+          composerPlaceholder: null,
+          messages: {
+            create: messages.map((m) => ({
+              role: m.role,
+              type: m.type,
+              content: m.content,
+              metadata: m.metadata ? (m.metadata as unknown as Prisma.InputJsonValue) : Prisma.JsonNull,
+            })),
+          },
         },
-      },
-      include: { messages: { orderBy: { createdAt: 'asc' } } },
-    });
+        include: sessionMessagesInclude,
+      });
 
-    return this.buildSessionResponse(session, session.messages, sa);
+      return this.buildSessionResponse(session, chronologicalMessages(session.messages), sa);
+    } catch (err) {
+      if (isUniqueViolation(err)) {
+        const raced = await this.findActiveSession(serviceAccountId);
+        if (raced) {
+          return this.buildSessionResponse(raced, chronologicalMessages(raced.messages), sa);
+        }
+      }
+      throw err;
+    }
+  }
+
+  private async findActiveSession(serviceAccountId: string) {
+    return this.prisma.actionSession.findFirst({
+      where: { serviceAccountId, status: 'active' },
+      include: sessionMessagesInclude,
+    });
   }
 
   // ── 메시지 전송 ──────────────────────────────────────────────────────────────
