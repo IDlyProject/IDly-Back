@@ -44,9 +44,9 @@ class SendMessageDto {
   @IsString()
   sessionId: string;
 
-  @ApiProperty({ enum: ['action_select', 'user_text', 'feedback', 'failure_reason'] })
-  @IsEnum(['action_select', 'user_text', 'feedback', 'failure_reason'])
-  type: 'action_select' | 'user_text' | 'feedback' | 'failure_reason';
+  @ApiProperty({ enum: ['action_select', 'feedback', 'failure_reason'] })
+  @IsEnum(['action_select', 'feedback', 'failure_reason'])
+  type: 'action_select' | 'feedback' | 'failure_reason';
 
   @ApiProperty({ required: false })
   @IsString()
@@ -187,7 +187,6 @@ export class RisksController {
     summary: '보안도우미 메시지 전송',
     description: `**type 종류**
 - \`action_select\`: 조치 항목 선택 (actionItemId 필수)
-- \`user_text\`: 자유 텍스트 입력 (message 필수)
 - \`feedback\`: 조치 완료/실패 피드백 (feedbackValue 필수: \`completed\` | \`failed\`)
 - \`failure_reason\`: 실패 사유 입력 (message 필수, reasonCategory 선택)`,
   })

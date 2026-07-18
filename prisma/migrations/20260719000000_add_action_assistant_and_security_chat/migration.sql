@@ -28,9 +28,13 @@ CREATE TABLE IF NOT EXISTS "ActionSession" (
 
 CREATE INDEX IF NOT EXISTS "ActionSession_serviceAccountId_status_idx" ON "ActionSession"("serviceAccountId", "status");
 
-ALTER TABLE "ActionSession" ADD CONSTRAINT "ActionSession_serviceAccountId_fkey"
-    FOREIGN KEY ("serviceAccountId") REFERENCES "ServiceAccount"("id") ON DELETE CASCADE ON UPDATE CASCADE
-    NOT VALID;
+DO $$
+BEGIN
+  ALTER TABLE "ActionSession" ADD CONSTRAINT "ActionSession_serviceAccountId_fkey"
+      FOREIGN KEY ("serviceAccountId") REFERENCES "ServiceAccount"("id") ON DELETE CASCADE ON UPDATE CASCADE
+      NOT VALID;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- ActionMessage
 CREATE TABLE IF NOT EXISTS "ActionMessage" (
@@ -47,9 +51,13 @@ CREATE TABLE IF NOT EXISTS "ActionMessage" (
 
 CREATE INDEX IF NOT EXISTS "ActionMessage_sessionId_createdAt_idx" ON "ActionMessage"("sessionId", "createdAt");
 
-ALTER TABLE "ActionMessage" ADD CONSTRAINT "ActionMessage_sessionId_fkey"
-    FOREIGN KEY ("sessionId") REFERENCES "ActionSession"("id") ON DELETE CASCADE ON UPDATE CASCADE
-    NOT VALID;
+DO $$
+BEGIN
+  ALTER TABLE "ActionMessage" ADD CONSTRAINT "ActionMessage_sessionId_fkey"
+      FOREIGN KEY ("sessionId") REFERENCES "ActionSession"("id") ON DELETE CASCADE ON UPDATE CASCADE
+      NOT VALID;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- ActionAttempt
 CREATE TABLE IF NOT EXISTS "ActionAttempt" (
@@ -64,13 +72,21 @@ CREATE TABLE IF NOT EXISTS "ActionAttempt" (
     CONSTRAINT "ActionAttempt_pkey" PRIMARY KEY ("id")
 );
 
-ALTER TABLE "ActionAttempt" ADD CONSTRAINT "ActionAttempt_sessionId_fkey"
-    FOREIGN KEY ("sessionId") REFERENCES "ActionSession"("id") ON DELETE CASCADE ON UPDATE CASCADE
-    NOT VALID;
+DO $$
+BEGIN
+  ALTER TABLE "ActionAttempt" ADD CONSTRAINT "ActionAttempt_sessionId_fkey"
+      FOREIGN KEY ("sessionId") REFERENCES "ActionSession"("id") ON DELETE CASCADE ON UPDATE CASCADE
+      NOT VALID;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-ALTER TABLE "ActionAttempt" ADD CONSTRAINT "ActionAttempt_actionItemId_fkey"
-    FOREIGN KEY ("actionItemId") REFERENCES "ActionItem"("id") ON DELETE CASCADE ON UPDATE CASCADE
-    NOT VALID;
+DO $$
+BEGIN
+  ALTER TABLE "ActionAttempt" ADD CONSTRAINT "ActionAttempt_actionItemId_fkey"
+      FOREIGN KEY ("actionItemId") REFERENCES "ActionItem"("id") ON DELETE CASCADE ON UPDATE CASCADE
+      NOT VALID;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- SecurityChat
 CREATE TABLE IF NOT EXISTS "SecurityChat" (
@@ -84,9 +100,13 @@ CREATE TABLE IF NOT EXISTS "SecurityChat" (
 
 CREATE UNIQUE INDEX IF NOT EXISTS "SecurityChat_userId_key" ON "SecurityChat"("userId");
 
-ALTER TABLE "SecurityChat" ADD CONSTRAINT "SecurityChat_userId_fkey"
-    FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE
-    NOT VALID;
+DO $$
+BEGIN
+  ALTER TABLE "SecurityChat" ADD CONSTRAINT "SecurityChat_userId_fkey"
+      FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE
+      NOT VALID;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- SecurityChatMessage
 CREATE TABLE IF NOT EXISTS "SecurityChatMessage" (
@@ -103,6 +123,10 @@ CREATE TABLE IF NOT EXISTS "SecurityChatMessage" (
 
 CREATE INDEX IF NOT EXISTS "SecurityChatMessage_chatId_createdAt_idx" ON "SecurityChatMessage"("chatId", "createdAt");
 
-ALTER TABLE "SecurityChatMessage" ADD CONSTRAINT "SecurityChatMessage_chatId_fkey"
-    FOREIGN KEY ("chatId") REFERENCES "SecurityChat"("id") ON DELETE CASCADE ON UPDATE CASCADE
-    NOT VALID;
+DO $$
+BEGIN
+  ALTER TABLE "SecurityChatMessage" ADD CONSTRAINT "SecurityChatMessage_chatId_fkey"
+      FOREIGN KEY ("chatId") REFERENCES "SecurityChat"("id") ON DELETE CASCADE ON UPDATE CASCADE
+      NOT VALID;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
