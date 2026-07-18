@@ -193,7 +193,6 @@ export class RisksController {
   // ── 건너뛰기 ──────────────────────────────────────────────────────────────────
 
   @Patch(':serviceAccountId/skip')
-  @Post(':serviceAccountId/skip')
   @HttpCode(200)
   @ApiTags('2-3. 계정 상세 · 보안 조치')
   @ApiOperation({ summary: '조치 건너뛰기 — skipped 처리' })
@@ -206,7 +205,6 @@ export class RisksController {
   // ── 숨기기 / 복원 ─────────────────────────────────────────────────────────────
 
   @Patch(':serviceAccountId/dormant')
-  @Post(':serviceAccountId/dormant')
   @HttpCode(200)
   @ApiTags('2-1. 홈 화면')
   @ApiOperation({
