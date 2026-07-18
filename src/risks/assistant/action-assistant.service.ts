@@ -267,11 +267,12 @@ export class ActionAssistantService {
           composerEnabled: false,
           composerPlaceholder: null,
           messages: {
-            create: messages.map((m) => ({
+            create: messages.map((m, i) => ({
               role: m.role,
               type: m.type,
               content: m.content,
               metadata: m.metadata ? (m.metadata as unknown as Prisma.InputJsonValue) : Prisma.JsonNull,
+              createdAt: new Date(Date.now() + i), // 동일 트랜잭션 내 순서 보장 (+1ms per msg)
             })),
           },
         },
@@ -519,9 +520,10 @@ export class ActionAssistantService {
       throw new BadRequestException('user_text 타입은 지원되지 않습니다. failure_reason을 사용해주세요.');
     }
 
-    // assistant 메시지 일괄 저장
+    // assistant 메시지 일괄 저장 (+1ms offset으로 동일 트랜잭션 내 순서 보장)
+    const msgBaseTime = Date.now();
     const savedAssistant = await this.prisma.$transaction(
-      assistantMsgs.map((m) =>
+      assistantMsgs.map((m, i) =>
         this.prisma.actionMessage.create({
           data: {
             sessionId: session.id,
@@ -529,6 +531,7 @@ export class ActionAssistantService {
             type: m.type,
             content: m.content,
             metadata: m.metadata ? (m.metadata as unknown as Prisma.InputJsonValue) : Prisma.JsonNull,
+            createdAt: new Date(msgBaseTime + i),
           },
         }),
       ),
