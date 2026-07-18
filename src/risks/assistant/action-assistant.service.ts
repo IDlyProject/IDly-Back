@@ -202,8 +202,9 @@ export class ActionAssistantService {
       metadata: { actionList: { title: '추천 조치 사항', actionIds: items.map((i) => i.id) } },
     });
 
-    // 3. bootstrap: 첫 required 조치 메시지 시퀀스
+    // 3. bootstrap: 첫 required 조치 자동 선택 — user_chip + 조치 메시지 시퀀스
     if (bootstrapFirstAction && firstRequired) {
+      messages.push({ role: 'user', type: 'user_chip', content: firstRequired.title });
       this.appendActionMessages(messages, firstRequired, displayName, registry, items);
     }
 

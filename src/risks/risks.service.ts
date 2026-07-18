@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { restoreAccountStatus } from '../common/domain/status';
 import { cleanServiceName, resolveService } from '../common/registry/service-registry';
+import { ACTION_KB } from './policy/action-kb';
 
 const RISK_BADGE: Record<string, string> = {
   high: '보안 위험',
@@ -50,7 +51,12 @@ export class RisksService {
     const firstPending = pendingItems[0] ?? null;
     const activeSessionId = sa.actionSessions[0]?.id ?? null;
 
-    const cardNewsSource = sa.actionItems.find((a) => a.type !== 'unknown');
+    // Screen 1 카드뉴스 스트립 — 첫 번째 KB cardNews 항목
+    const kbFlat = Object.values(ACTION_KB).flat();
+    const firstKbWithCard = sa.actionItems
+      .map((a) => kbFlat.find((k) => k.stepType === a.type))
+      .find((k) => k?.cardNews != null);
+    const cardNews = firstKbWithCard?.cardNews ?? null;
 
     return {
       id: sa.id,
@@ -70,6 +76,7 @@ export class RisksService {
       summary: sa.summary,
       interpretation: sa.interpretation,
       activeSessionId,
+      cardNews,
       primaryCta: firstPending
         ? {
             actionItemId: firstPending.id,
