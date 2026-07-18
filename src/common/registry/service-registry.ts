@@ -97,7 +97,8 @@ export const SERVICE_REGISTRY: ServiceRegistryItem[] = [
   // ── Social ─────────────────────────────────────────────────────────────
   {
     serviceName: 'Twitter',
-    aliases: ['twitter', '트위터', 'x.com', ' x ', 'x (', '(x)'],
+    // 주의: alias 'x.com'을 단순 includes 하면 netflix.com 등에도 매칭됨 → resolveService에서 경계 매칭
+    aliases: ['twitter', '트위터', 'x.com', 'x (twitter)', '(x)'],
     domain: 'x.com',
     officialUrl: 'https://x.com',
     // 로그인 상태 비밀번호 변경 허브 (비로그인 시 로그인 유도)
@@ -315,18 +316,53 @@ export type ResolvedService = {
   fromRegistry: boolean;
 };
 
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/** 도메인/짧은 alias가 다른 문자열 내부에 끼어 매칭되는 것 방지 (x.com ⊂ netflix.com) */
+function textMatchesToken(haystack: string, token: string): boolean {
+  const t = token.toLowerCase();
+  if (!t) return false;
+  // 점이 포함된 도메인형: 앞이 영숫자면 부분 문자열 매칭 거부
+  if (t.includes('.')) {
+    return new RegExp(`(?:^|[^a-z0-9])${escapeRegExp(t)}(?:[^a-z0-9]|$)`, 'i').test(haystack);
+  }
+  // 짧은 토큰(≤2): 단어 경계
+  if (t.length <= 2) {
+    return new RegExp(`(?:^|[^a-z0-9가-힣])${escapeRegExp(t)}(?:[^a-z0-9가-힣]|$)`, 'i').test(
+      haystack,
+    );
+  }
+  return haystack.includes(t);
+}
+
 export function resolveService(...candidates: (string | null | undefined)[]): ResolvedService {
   const texts = candidates
     .map((value) => value?.trim())
     .filter((value): value is string => Boolean(value));
   const lower = texts.join('\n').toLowerCase();
-  const found = SERVICE_REGISTRY.find(
-    (item) =>
-      lower.includes(item.domain.toLowerCase()) ||
-      item.aliases.some((alias) => lower.includes(alias.toLowerCase())),
-  );
 
-  if (found) {
+  // 가장 긴(구체적) 매칭을 선택 — 등록 순서에 덜 민감
+  let best: { item: (typeof SERVICE_REGISTRY)[number]; score: number } | null = null;
+  for (const item of SERVICE_REGISTRY) {
+    let score = 0;
+    const domain = item.domain.toLowerCase();
+    if (textMatchesToken(lower, domain)) {
+      score = Math.max(score, domain.length + 100);
+    }
+    for (const alias of item.aliases) {
+      if (textMatchesToken(lower, alias)) {
+        score = Math.max(score, alias.length + (alias.includes('.') ? 50 : 0));
+      }
+    }
+    if (score > 0 && (!best || score > best.score)) {
+      best = { item, score };
+    }
+  }
+
+  if (best) {
+    const found = best.item;
     return {
       serviceName: found.serviceName,
       iconUrl: `${CLEARBIT_BASE}/${found.domain}`,
