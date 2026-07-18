@@ -161,7 +161,7 @@ export class ActionAssistantService {
         status: { in: ['active', 'completed'] },
       },
       orderBy: [{ status: 'asc' }, { startedAt: 'desc' }], // active 우선
-      include: { messages: { orderBy: { createdAt: 'asc' } } },
+      include: { messages: { orderBy: { createdAt: 'asc' }, take: 100 } },
     });
 
     if (!session) return null;
@@ -178,14 +178,29 @@ export class ActionAssistantService {
   ) {
     const sa = await this.assertOwnership(serviceAccountId, userId);
 
+    // action_required/watch 상태가 아니면 세션 생성 불가 (resolved/skipped/safe)
+    if (!['action_required', 'watch'].includes(sa.status)) {
+      // 가장 최근 completed 세션이 있으면 readOnly로 반환
+      const lastCompleted = await this.prisma.actionSession.findFirst({
+        where: { serviceAccountId, status: 'completed' },
+        orderBy: { completedAt: 'desc' },
+        include: { messages: { orderBy: { createdAt: 'asc' }, take: 100 } },
+      });
+      if (lastCompleted) return this.buildSessionResponse(lastCompleted, lastCompleted.messages, sa);
+      throw new BadRequestException('보안 조치가 필요하지 않은 계정입니다.');
+    }
+
     // 기존 active 있으면 idempotent 반환
     const existing = await this.prisma.actionSession.findFirst({
       where: { serviceAccountId, status: 'active' },
-      include: { messages: { orderBy: { createdAt: 'asc' } } },
+      include: { messages: { orderBy: { createdAt: 'asc' }, take: 100 } },
     });
     if (existing) return this.buildSessionResponse(existing, existing.messages, sa);
 
     const items = await this.loadItems(serviceAccountId);
+
+    // 조치 항목이 없으면 세션 생성 불가 (분석 미완료)
+    if (items.length === 0) throw new BadRequestException('조치 항목이 아직 없습니다. 분석 완료 후 시도해주세요.');
     const registry = resolveService(sa.serviceName);
     const displayName = cleanServiceName(sa.serviceName);
 
