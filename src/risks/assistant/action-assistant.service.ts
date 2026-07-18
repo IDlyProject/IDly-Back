@@ -153,7 +153,7 @@ export class ActionAssistantService {
   // ── 세션 조회 ────────────────────────────────────────────────────────────────
 
   async getSession(serviceAccountId: string, userId: string) {
-    await this.assertOwnership(serviceAccountId, userId);
+    const sa = await this.assertOwnership(serviceAccountId, userId);
 
     const session = await this.prisma.actionSession.findFirst({
       where: {
@@ -166,7 +166,6 @@ export class ActionAssistantService {
 
     if (!session) return null;
 
-    const sa = await this.loadSa(serviceAccountId);
     return this.buildSessionResponse(session, session.messages, sa);
   }
 
@@ -284,7 +283,7 @@ export class ActionAssistantService {
     if (body.type === 'action_select') {
       const item = items.find((i) => i.id === body.actionItemId);
       if (!item) throw new NotFoundException('조치 항목을 찾을 수 없습니다.');
-      if (item.status === 'done') throw new BadRequestException('이미 완료된 조치 항목입니다.');
+      if (!['pending', 'failed'].includes(item.status)) throw new BadRequestException('선택할 수 없는 조치 항목입니다.');
 
       // user chip
       const userMsg = await this.prisma.actionMessage.create({
@@ -298,7 +297,9 @@ export class ActionAssistantService {
 
     } else if (body.type === 'feedback') {
       if (!body.feedbackValue) throw new BadRequestException('feedbackValue 필수');
-      const targetId = body.actionItemId ?? session.activeActionItemId;
+      if (!session.feedbackEnabled) throw new BadRequestException('완료/실패 피드백 가능 상태가 아닙니다.');
+      // body.actionItemId 무시 — active item만 허용
+      const targetId = session.activeActionItemId;
       const item = items.find((i) => i.id === targetId);
       if (!item) throw new NotFoundException('조치 항목을 찾을 수 없습니다.');
 
@@ -387,7 +388,8 @@ export class ActionAssistantService {
             role: 'assistant',
             type: 'action_list',
             content: '남은 조치 사항',
-            metadata: { actionList: { title: '남은 조치 사항', actionIds: remainRequired.map((i) => i.id) } },
+            // dynamic.html makeRemainingList: 전체(완료 포함) 렌더, done은 회색 체크로 표시
+            metadata: { actionList: { title: '남은 조치 사항', actionIds: updatedItems.filter((i) => i.isRequired).map((i) => i.id) } },
           });
 
           sessionPatch = { activeActionItemId: null, feedbackEnabled: false, composerEnabled: false, composerPlaceholder: null };
@@ -419,7 +421,8 @@ export class ActionAssistantService {
       const userText = (body.message ?? '').slice(0, 500);
       if (!userText) throw new BadRequestException('message 필수');
 
-      const targetId = body.actionItemId ?? session.activeActionItemId;
+      // body.actionItemId 무시 — activeActionItemId만 허용 (dynamic.html: 직전 "못했어요" 조치에만 사유 귀속)
+      const targetId = session.activeActionItemId;
       const item = items.find((i) => i.id === targetId);
       if (!item) throw new NotFoundException('조치 항목을 찾을 수 없습니다.');
 
@@ -429,17 +432,19 @@ export class ActionAssistantService {
       });
       userMessage = buildMessageDto(userMsg);
 
-      // attempt 저장 + item failed
-      await this.prisma.actionItem.update({ where: { id: item.id }, data: { status: 'failed' } });
-      await this.prisma.actionAttempt.create({
-        data: {
-          sessionId: session.id,
-          actionItemId: item.id,
-          status: 'failed',
-          reason: userText,
-          reasonCategory: body.reasonCategory ?? null,
-        },
-      });
+      // attempt 저장 + item failed — 트랜잭션으로 묶음
+      await this.prisma.$transaction([
+        this.prisma.actionItem.update({ where: { id: item.id }, data: { status: 'failed' } }),
+        this.prisma.actionAttempt.create({
+          data: {
+            sessionId: session.id,
+            actionItemId: item.id,
+            status: 'failed',
+            reason: userText,
+            reasonCategory: body.reasonCategory ?? null,
+          },
+        }),
+      ]);
 
       // KB help 메시지
       const kbEntry = getKbSteps(sa.primaryRiskType).find((k) => k.stepType === item.type);
@@ -452,95 +457,9 @@ export class ActionAssistantService {
       sessionPatch = { composerEnabled: false, composerPlaceholder: null, feedbackEnabled: true, activeActionItemId: item.id };
 
     } else {
-      // user_text — Light RAG chatbot (composerEnabled=true 상태에서만 허용)
-      if (!session.composerEnabled) throw new BadRequestException('텍스트 입력이 비활성화된 상태입니다.');
-      const userText = (body.message ?? '').slice(0, 1000).trim();
-      if (!userText) throw new BadRequestException('message 필수');
-
-      const userMsg = await this.prisma.actionMessage.create({
-        data: { sessionId: session.id, role: 'user', type: 'text', content: userText },
-      });
-      userMessage = buildMessageDto(userMsg);
-
-      const activeItem = session.activeActionItemId
-        ? (items.find((i) => i.id === session.activeActionItemId) ?? null)
-        : null;
-      const kbEntries = getKbSteps(sa.primaryRiskType);
-
-      const evidences = await this.prisma.riskEvidence.findMany({
-        where: { serviceAccountId },
-        orderBy: { receivedAt: 'desc' },
-        take: 3,
-        select: { subject: true },
-      });
-
-      const regForKb = registry
-        ? {
-            officialUrl: registry.officialUrl ?? undefined,
-            passwordUrl: registry.passwordUrl ?? undefined,
-            securityUrl: registry.securityUrl ?? undefined,
-          }
-        : null;
-      const officialUrl = activeItem
-        ? (activeItem.externalUrl ?? resolveKbUrl(regForKb, kbEntries.find((k) => k.stepType === activeItem.type)?.officialUrlKind ?? null))
-        : (registry?.officialUrl ?? null);
-
-      const solarResult = await this.callSolarChat(userText, {
-        displayName,
-        riskType: sa.primaryRiskType,
-        headline: sa.headline,
-        recentEvidence: evidences.map((e) => e.subject).filter((s): s is string => !!s),
-        activeItem,
-        kbEntries,
-        officialUrl,
-      });
-
-      assistantMsgs.push({ role: 'assistant', type: 'text', content: solarResult.reply });
-
-      if (solarResult.showLink) {
-        const linkItem = activeItem ?? items.find((i) => i.isRequired && i.status !== 'done') ?? null;
-        const card = linkItem
-          ? buildExternalCard(linkItem, displayName, registry)
-          : (registry?.officialUrl
-            ? {
-                label: `${displayName} 공식`,
-                title: displayName,
-                subtitle: null,
-                url: registry.officialUrl,
-                domain: domainFromUrl(registry.officialUrl),
-                trustLabel: '공식 페이지' as const,
-                ctaLabel: '페이지로 이동',
-              }
-            : null);
-        if (card) {
-          assistantMsgs.push({
-            role: 'assistant',
-            type: 'official_link',
-            content: `${displayName} 공식 페이지로 바로 이동할 수 있어요!`,
-            metadata: { externalCard: card },
-          });
-        }
-      }
-
-      if (solarResult.showFeedback && activeItem) {
-        assistantMsgs.push({
-          role: 'assistant',
-          type: 'feedback_actions',
-          content: '',
-          metadata: {
-            feedbackActions: {
-              actionItemId: activeItem.id,
-              completeLabel: '조치를 완료했어요 !',
-              failLabel: '조치하지 못했어요',
-            },
-          },
-        });
-      }
-
-      // showFeedback이면 feedback 대기 상태로, 아니면 composer 열린 채 유지
-      sessionPatch = solarResult.showFeedback && activeItem
-        ? { feedbackEnabled: true, composerEnabled: false, composerPlaceholder: null }
-        : {};
+      // Phase 1: user_text 미지원 — composer는 failure_reason 전용
+      // dynamic.html handleSend()는 항상 실패 사유 플로우만 처리
+      throw new BadRequestException('user_text 타입은 지원되지 않습니다. failure_reason을 사용해주세요.');
     }
 
     // assistant 메시지 일괄 저장
@@ -669,8 +588,10 @@ export class ActionAssistantService {
 
     let completion: object | null = null;
     if (session.status === 'completed') {
+      const gmailUserId = sa.gmailAccount?.userId;
+      if (!gmailUserId) throw new Error('gmailAccount 관계 로드 실패 — serviceAccount에 gmailAccount가 없습니다.');
       const nextSa = await this.findNextActionRequired(
-        sa.gmailAccount?.userId ?? '',
+        gmailUserId,
         sa.id,
       );
       completion = {
@@ -696,7 +617,9 @@ export class ActionAssistantService {
       activeActionItemId: session.activeActionItemId,
       feedbackEnabled: session.feedbackEnabled,
       composerEnabled: session.composerEnabled,
-      composerPlaceholder: session.composerPlaceholder,
+      composerPlaceholder: session.composerEnabled
+        ? (session.composerPlaceholder ?? '막힌 부분을 알려주세요')
+        : '메시지를 입력하세요',
       title: '지금 바로 조치하기',
       botProfile: { name: '보안 도우미', avatarKey: 'owl' },
       progress,

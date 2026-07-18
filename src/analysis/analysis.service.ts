@@ -576,7 +576,9 @@ export class AnalysisService implements OnModuleInit {
         riskLevel !== 'safe' &&
         primaryRiskType &&
         (existingActions.length === 0 ||
-          (hasNewEvidence && existing?.primaryRiskType !== primaryRiskType));
+          (hasNewEvidence && existing?.primaryRiskType !== primaryRiskType) ||
+          // type=unknown 항목이 있으면 KB merge 강제 — 배포 후 기존 row 보강
+          existingActions.some((a) => !a.type || a.type === 'unknown' || !a.why));
 
       if (shouldRefreshActions) {
         const kbSteps = getKbSteps(primaryRiskType);
@@ -625,8 +627,16 @@ export class AnalysisService implements OnModuleInit {
           }
         }
 
-        // KB에 없는 unknown 타입 기존 항목 — type='unknown'으로 다음 분석까지 보관
-        // (설계 §4.3: 재분석 시 KB merge, 그 전까지 그대로)
+        // KB merge 후 existingByType에 남은 항목 = 현재 riskType KB에 없는 구 step
+        // done 항목은 이력 보존, 나머지는 skipped 처리하여 2-3 조치 목록에서 제외
+        for (const [, staleItem] of existingByType.entries()) {
+          if (staleItem.status !== 'done') {
+            await this.prisma.actionItem.update({
+              where: { id: staleItem.id },
+              data: { status: 'skipped' },
+            });
+          }
+        }
       }
     }
 

@@ -71,13 +71,13 @@ export class SecurityChatService {
       update: {},
       include: {
         messages: {
-          orderBy: { createdAt: 'asc' },
+          orderBy: { createdAt: 'desc' }, // 최신 50개 가져온 뒤 역순으로 반환
           take: 50,
         },
       },
     });
 
-    return this.buildChatResponse(chat.id, chat.messages);
+    return this.buildChatResponse(chat.id, [...chat.messages].reverse());
   }
 
   async sendMessage(userId: string, message: string) {
@@ -103,18 +103,8 @@ export class SecurityChatService {
       data: { chatId: chat.id, role: 'user', type: 'text', content: message.slice(0, 1000) },
     });
 
-    // 전체 SA 컨텍스트 로드
-    const allSa = await this.prisma.serviceAccount.findMany({
-      where: {
-        gmailAccount: { userId },
-        status: { not: 'dormant' },
-      },
-      include: {
-        actionItems: { where: { isRequired: true }, orderBy: { order: 'asc' } },
-        riskEvidences: { orderBy: { receivedAt: 'desc' }, take: 2 },
-      },
-      orderBy: { createdAt: 'asc' },
-    });
+    // 위험도 높은 SA 우선 — safe/resolved/skipped는 컨텍스트 제외, top 10 제한
+    const allSa = await this.loadAllSa(userId);
 
     // Solar 호출
     const signal = await this.callSolar(message, allSa, historyForLlm, userId);
@@ -362,12 +352,19 @@ showExitCta: 대화를 마무리하거나 다른 페이지로 안내할 때 true
   }
 
   private async loadAllSa(userId: string) {
+    // safe/resolved/dormant/skipped 제외, 위험도 높은 순 top 10
     return this.prisma.serviceAccount.findMany({
-      where: { gmailAccount: { userId }, status: { not: 'dormant' } },
+      where: {
+        gmailAccount: { userId },
+        status: { in: ['action_required', 'watch'] },
+        riskLevel: { in: ['high', 'medium'] },
+      },
       include: {
         actionItems: { where: { isRequired: true }, orderBy: { order: 'asc' } },
         riskEvidences: { orderBy: { receivedAt: 'desc' }, take: 2 },
       },
+      orderBy: [{ riskLevel: 'asc' }, { createdAt: 'asc' }], // high(asc) = 알파벳순이라 별도 정렬 필요시 수동
+      take: 10,
     });
   }
 

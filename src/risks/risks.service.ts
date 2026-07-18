@@ -145,6 +145,11 @@ export class RisksService {
       return { serviceAccountId, status: 'dormant' };
     }
 
+    await this.prisma.actionSession.updateMany({
+      where: { serviceAccountId, status: 'active' },
+      data: { status: 'abandoned', completedAt: new Date(), feedbackEnabled: false, composerEnabled: false, composerPlaceholder: null },
+    });
+
     await this.prisma.serviceAccount.update({
       where: { id: serviceAccountId },
       data: {
