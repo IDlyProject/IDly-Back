@@ -28,8 +28,15 @@ describe('action-kb generalization', () => {
     expect(amazon).toContain('로그인 및 보안');
     expect(amazon).not.toMatch(/Google:|Kakao:|Naver:/);
 
-    const ood = resolveStepHelp(entry, { displayName: 'Discord', hasOfficialUrl: false });
-    expect(ood).toContain('Discord');
+    // Discord는 플레이북 경로가 있으면 경로 1줄만 추가 (멀티 브랜드 나열 금지)
+    const discord = resolveStepHelp(entry, { displayName: 'Discord', hasOfficialUrl: true });
+    expect(discord).toContain('Discord');
+    expect(discord).toContain('사용자 설정');
+    expect(discord).not.toMatch(/Google:|Amazon:/);
+
+    // 완전 미등록 서비스 + URL 없음 → 직접 접속 안내
+    const ood = resolveStepHelp(entry, { displayName: 'SomeObscureBank', hasOfficialUrl: false });
+    expect(ood).toContain('SomeObscureBank');
     expect(ood).toContain('직접');
     expect(ood).not.toMatch(/Google:|Amazon:/);
   });

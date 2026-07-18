@@ -22,18 +22,37 @@ export interface ActionKbEntry {
 /**
  * stepType × 정규화 서비스키 → 짧은 메뉴 경로.
  * help 본문에는 넣지 않고, resolveStepHelp()가 **현재 서비스 1개만** 덧붙인다.
+ * (서비스 키는 normalizeServiceKey / SERVICE_REGISTRY.serviceName과 맞춤)
  */
 const SERVICE_STEP_PATHS: Record<string, Record<string, string>> = {
   change_password: {
     Google: 'myaccount.google.com → 보안 → 비밀번호',
     Gmail: 'myaccount.google.com → 보안 → 비밀번호',
+    YouTube: 'Google 계정 → 보안 → 비밀번호',
     Amazon: '계정 → 로그인 및 보안 → 비밀번호',
-    Twitter: '설정 → 보안 및 계정 액세스 → 계정 → 비밀번호',
-    X: '설정 → 보안 및 계정 액세스 → 계정 → 비밀번호',
-    Kakao: '카카오계정 → 보안 → 비밀번호 변경',
-    Naver: '내정보 → 보안설정 → 비밀번호 변경',
+    Twitter: '설정 → 계정 → 비밀번호',
+    X: '설정 → 계정 → 비밀번호',
+    Kakao: '카카오계정 → 계정 정보 → 비밀번호',
+    Naver: '네이버ID → 보안설정 → 비밀번호',
     Netflix: '계정 → 비밀번호 변경',
-    Microsoft: 'account.microsoft.com → 보안 → 비밀번호',
+    Microsoft: 'account.microsoft.com → 보안 → 비밀번호 변경',
+    Apple: 'appleid.apple.com → 로그인 및 보안 → 비밀번호',
+    Discord: '사용자 설정 → 내 계정 → 비밀번호 변경',
+    Notion: 'Settings & members → My account → Account security',
+    Slack: '프로필 → 계정 설정 → 비밀번호',
+    GitHub: 'Settings → Password and authentication',
+    Instagram: '설정 → 계정 센터 → 비밀번호',
+    Facebook: '설정 및 개인정보 → 비밀번호 및 보안',
+    LinkedIn: '설정 → 로그인 및 보안 → 비밀번호 변경',
+    Spotify: '계정 개요 → 비밀번호 변경',
+    Steam: '계정 세부 정보 → 비밀번호 변경',
+    Coupang: '마이쿠팡 → 회원정보 수정 → 비밀번호',
+    사람인: '회원정보 관리 → 비밀번호 변경',
+    PayPal: '설정 → 보안 → 비밀번호',
+    Dropbox: '설정 → 보안 → 비밀번호',
+    Zoom: '프로필 → 비밀번호',
+    Twitch: '설정 → 보안 및 개인정보',
+    Reddit: 'User Settings → Account → password',
   },
   logout_sessions: {
     Google: 'myaccount.google.com → 보안 → 기기 관리',
@@ -42,6 +61,16 @@ const SERVICE_STEP_PATHS: Record<string, Record<string, string>> = {
     Twitter: '설정 → 보안 및 계정 액세스 → 앱 및 세션',
     X: '설정 → 보안 및 계정 액세스 → 앱 및 세션',
     Netflix: '계정 → 모든 기기에서 로그아웃',
+    Discord: '사용자 설정 → 기기 → 모든 기기에서 로그아웃',
+    Notion: 'Settings → My account → Devices / sessions',
+    Slack: '계정 설정 → 세션 → 다른 세션 로그아웃',
+    GitHub: 'Settings → Sessions',
+    Microsoft: 'account.microsoft.com → 보안 → 로그인 활동',
+    Apple: 'appleid.apple.com → 기기',
+    Instagram: '로그인 활동 → 로그아웃',
+    Facebook: '설정 → 보안 → 로그인 위치',
+    Spotify: '계정 개요 → 로그아웃 모든 기기',
+    Steam: '계정 → 보안 → 승인된 기기',
   },
   enable_2fa: {
     Google: 'myaccount.google.com → 보안 → 2단계 인증',
@@ -49,7 +78,17 @@ const SERVICE_STEP_PATHS: Record<string, Record<string, string>> = {
     Twitter: '설정 → 보안 → 이중 인증',
     X: '설정 → 보안 → 이중 인증',
     Kakao: '카카오계정 → 보안 → 2단계 인증',
-    Naver: '내정보 → 보안설정 → 2단계 인증',
+    Naver: '네이버ID → 보안설정 → 2단계 인증',
+    Discord: '사용자 설정 → 내 계정 → 이중 인증',
+    GitHub: 'Settings → Password and authentication → 2FA',
+    Microsoft: 'account.microsoft.com → 보안 → 추가 보안',
+    Apple: 'appleid.apple.com → 로그인 및 보안 → 2단계 확인',
+    Notion: 'Settings → My account → 2-step verification',
+    Slack: '계정 설정 → 2단계 인증',
+    Instagram: '설정 → 계정 센터 → 2단계 인증',
+    Facebook: '설정 → 비밀번호 및 보안 → 2단계 인증',
+    Steam: 'Steam Guard → 모바일 인증기',
+    Twitch: '설정 → 보안 → 2단계 인증',
   },
   verify_activity: {
     Google: 'myaccount.google.com → 보안 → 최근 보안 활동',
@@ -57,6 +96,12 @@ const SERVICE_STEP_PATHS: Record<string, Record<string, string>> = {
     Amazon: '계정 → 로그인 및 보안 → 최근 활동',
     Twitter: '설정 → 앱 및 세션 → 계정 액세스 기록',
     X: '설정 → 앱 및 세션 → 계정 액세스 기록',
+    Discord: '사용자 설정 → 기기 / 승인된 앱',
+    Microsoft: 'account.microsoft.com → 보안 → 로그인 활동',
+    GitHub: 'Settings → Security log',
+    Instagram: '로그인 활동',
+    Facebook: '설정 → 보안 → 로그인 위치',
+    Notion: 'Settings → My account → Devices',
   },
   check_recovery: {
     Google: 'myaccount.google.com → 개인 정보 → 복구 연락처',
@@ -64,6 +109,10 @@ const SERVICE_STEP_PATHS: Record<string, Record<string, string>> = {
     Amazon: '계정 → 로그인 및 보안 → 복구 수단',
     Twitter: '설정 → 계정 → 이메일·전화번호',
     X: '설정 → 계정 → 이메일·전화번호',
+    Microsoft: 'account.microsoft.com → 보안 → 고급 보안 옵션',
+    Apple: 'appleid.apple.com → 로그인 및 보안 → 계정 복구',
+    Naver: '네이버ID → 보안설정 → 연락처',
+    Kakao: '카카오계정 → 계정 정보 → 연락처',
   },
   review_apps: {
     Google: 'myaccount.google.com → 보안 → 서드파티 액세스',
@@ -71,6 +120,13 @@ const SERVICE_STEP_PATHS: Record<string, Record<string, string>> = {
     Twitter: '설정 → 앱 및 세션 → 연결된 앱',
     X: '설정 → 앱 및 세션 → 연결된 앱',
     Kakao: '카카오계정 → 연결된 서비스',
+    Discord: '사용자 설정 → 승인된 앱',
+    GitHub: 'Settings → Applications → Authorized OAuth Apps',
+    Microsoft: 'account.microsoft.com → 개인정보 → 앱 액세스',
+    Slack: '계정 설정 → 연결된 계정',
+    Notion: 'Settings → My connections',
+    Facebook: '설정 → 앱 및 웹사이트',
+    Instagram: '설정 → 앱 및 웹사이트',
   },
   revoke_app_access: {
     Google: '서드파티 액세스 → 앱 선택 → 액세스 삭제',
@@ -78,12 +134,22 @@ const SERVICE_STEP_PATHS: Record<string, Record<string, string>> = {
     Twitter: '연결된 앱 → 앱 권한 취소',
     X: '연결된 앱 → 앱 권한 취소',
     Kakao: '연결된 서비스 → 연결 끊기',
+    Discord: '승인된 앱 → 인증 해제',
+    GitHub: 'Authorized OAuth Apps → Revoke',
+    Facebook: '앱 및 웹사이트 → 제거',
+    Slack: '연결된 계정 → 연결 해제',
   },
   security_review: {
     Google: 'myaccount.google.com → 보안 → 보안 진단',
     Gmail: 'myaccount.google.com → 보안 → 보안 진단',
     사람인: '마이페이지 → 계정 설정 → 보안/로그인 기록',
     Saramin: '마이페이지 → 계정 설정 → 보안/로그인 기록',
+    Microsoft: 'account.microsoft.com → 보안',
+    Apple: 'appleid.apple.com → 로그인 및 보안',
+    Discord: '사용자 설정 → 내 계정 / 기기',
+    GitHub: 'Settings → Security log',
+    Naver: '네이버ID → 보안설정',
+    Kakao: '카카오계정 → 보안',
   },
 };
 
@@ -335,16 +401,34 @@ export function normalizeServiceKey(name: string | null | undefined): string | n
   const raw = name.trim();
   const n = raw.toLowerCase();
   if (n.includes('google') || n === 'gmail') return 'Google';
-  if (n.includes('amazon')) return 'Amazon';
-  if (n.includes('twitter') || n === 'x' || n.startsWith('x ')) return 'Twitter';
-  if (n.includes('kakao')) return 'Kakao';
-  if (n.includes('naver')) return 'Naver';
-  if (n.includes('netflix')) return 'Netflix';
-  if (n.includes('microsoft') || n.includes('outlook') || n.includes('live.com')) return 'Microsoft';
+  if (n.includes('youtube') || n.includes('유튜브')) return 'YouTube';
+  if (n.includes('amazon') || n.includes('아마존')) return 'Amazon';
+  if (n.includes('twitter') || n.includes('트위터') || n === 'x' || /\bx\b/.test(n)) return 'Twitter';
+  if (n.includes('kakao') || n.includes('카카오')) return 'Kakao';
+  if (n.includes('naver') || n.includes('네이버')) return 'Naver';
+  if (n.includes('netflix') || n.includes('넷플릭스')) return 'Netflix';
+  if (n.includes('microsoft') || n.includes('outlook') || n.includes('hotmail') || n.includes('xbox')) return 'Microsoft';
   if (n.includes('사람인') || n.includes('saramin')) return '사람인';
   if (n.includes('coupang') || n.includes('쿠팡')) return 'Coupang';
-  if (n.includes('apple') || n.includes('icloud')) return 'Apple';
-  // exact key fallback
+  if (n.includes('apple') || n.includes('icloud') || n.includes('애플')) return 'Apple';
+  if (n.includes('discord') || n.includes('디스코드')) return 'Discord';
+  if (n.includes('notion') || n.includes('노션')) return 'Notion';
+  if (n.includes('slack') || n.includes('슬랙')) return 'Slack';
+  if (n.includes('github') || n.includes('깃허브')) return 'GitHub';
+  if (n.includes('instagram') || n.includes('인스타')) return 'Instagram';
+  if (n.includes('facebook') || n.includes('페이스북') || n.includes('meta')) return 'Facebook';
+  if (n.includes('linkedin') || n.includes('링크드인')) return 'LinkedIn';
+  if (n.includes('spotify') || n.includes('스포티파이')) return 'Spotify';
+  if (n.includes('steam') || n.includes('스팀')) return 'Steam';
+  if (n.includes('twitch') || n.includes('트위치')) return 'Twitch';
+  if (n.includes('dropbox') || n.includes('드롭박스')) return 'Dropbox';
+  if (n.includes('zoom') || n.includes('줌')) return 'Zoom';
+  if (n.includes('paypal') || n.includes('페이팔')) return 'PayPal';
+  if (n.includes('reddit') || n.includes('레딧')) return 'Reddit';
+  if (n.includes('disney')) return 'Disney+';
+  if (n.includes('toss') || n.includes('토스')) return 'Toss';
+  if (n.includes('line') || n.includes('라인')) return 'LINE';
+  // exact key fallback (SERVICE_REGISTRY.serviceName과 동일하면 그대로)
   return raw;
 }
 

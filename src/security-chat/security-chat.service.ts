@@ -4,8 +4,13 @@ import { ConfigService } from '@nestjs/config';
 import { Prisma } from '@prisma/client';
 import { firstValueFrom } from 'rxjs';
 import { PrismaService } from '../prisma/prisma.service';
-import { resolveService, cleanServiceName } from '../common/registry/service-registry';
-import { ACTION_KB, getKbSteps } from '../risks/policy/action-kb';
+import {
+  resolveService,
+  cleanServiceName,
+  detectServiceFromText,
+  type ResolvedService,
+} from '../common/registry/service-registry';
+import { ACTION_KB, getKbSteps, matchKbEntry, resolveKbUrl } from '../risks/policy/action-kb';
 import { assertNoSensitiveData } from '../common/sanitize/secret-detector';
 
 // ─── 타입 ─────────────────────────────────────────────────────────────────────
@@ -189,63 +194,30 @@ export class SecurityChatService {
       }
     }
 
-    // 3. official_link — 특정 SA + actionType 기반 링크 카드
-    if (signal.showLink && signal.targetSaId) {
-      const targetSa = allSa.find((s) => s.id === signal.targetSaId);
-      if (targetSa) {
-        const registry = resolveService(targetSa.serviceName);
-        const displayName = targetSa.displayName ?? cleanServiceName(targetSa.serviceName);
-        const kbEntries = getKbSteps(targetSa.primaryRiskType);
-        const targetItem = findBestActionForMessage(
-          targetSa.actionItems,
-          signal.actionType,
-          message,
-        );
-        const kbEntry = targetItem
-          ? kbEntries.find((k) => k.stepType === targetItem.type)
-          : signal.actionType
-            ? kbEntries.find((k) => k.stepType === signal.actionType)
-            : kbEntries[0];
-
-        const officialUrlKind = kbEntry?.officialUrlKind ?? null;
-        let url: string | null = targetItem?.externalUrl ?? null;
-        if (!url && officialUrlKind === 'password') url = registry?.passwordUrl ?? registry?.officialUrl ?? null;
-        else if (officialUrlKind === 'security') url = registry?.securityUrl ?? registry?.officialUrl ?? null;
-        else if (!url) url = registry?.officialUrl ?? null;
-
-        const actionTitle = targetItem?.title ?? kbEntry?.title ?? displayName;
-        const actionSubtitle = targetItem?.description ?? kbEntry?.subtitle ?? null;
-
-        if (url) {
-          let domain: string | null = null;
-          try { domain = (new URL(url).hostname + new URL(url).pathname).replace(/\/$/, ''); } catch { /* noop */ }
-
+    // 3. official_link
+    // - 유저 SA(targetSaId) 우선
+    // - 없어도 메시지에서 registry 서비스명을 잡으면 플레이북 URL 사용 (OOD 일반화)
+    if (signal.showLink) {
+      const linkCard = this.buildOfficialLinkCard({
+        allSa,
+        targetSaId: signal.targetSaId,
+        actionType: signal.actionType,
+        userMessage: message,
+      });
+      if (linkCard) {
+        assistantMsgs.push({
+          role: 'assistant',
+          type: 'official_link',
+          content: linkCard.content,
+          metadata: { externalCard: linkCard.externalCard },
+        });
+        if (linkCard.cardNews) {
           assistantMsgs.push({
             role: 'assistant',
-            type: 'official_link',
-            content: `${displayName} ${actionTitle} 페이지로 바로 이동할 수 있어요!`,
-            metadata: {
-              externalCard: {
-                label: `${displayName} 공식`,
-                title: actionTitle,
-                subtitle: actionSubtitle,
-                url,
-                domain,
-                trustLabel: '공식 페이지',
-                ctaLabel: '페이지로 이동',
-              },
-            },
+            type: 'card_news',
+            content: linkCard.cardNews.title,
+            metadata: { cardNews: linkCard.cardNews },
           });
-
-          // card_news
-          if (kbEntry?.cardNews) {
-            assistantMsgs.push({
-              role: 'assistant',
-              type: 'card_news',
-              content: kbEntry.cardNews.title,
-              metadata: { cardNews: kbEntry.cardNews },
-            });
-          }
         }
       }
     }
@@ -343,9 +315,9 @@ ${saList || '분석된 계정이 없습니다.'}
   "showExitCta": true 또는 false
 }
 showActionList: 조치 목록을 보여주면 도움이 될 때 true.
-showLink: 특정 서비스의 공식 페이지 링크가 필요할 때 true (targetSaId 필수).
-targetSaId: 특정 서비스에 대한 질문일 때 해당 saId.
-actionType: 특정 조치 유형 (change_password, enable_2fa, logout_sessions 등).
+showLink: 특정 서비스의 공식 페이지 링크가 필요할 때 true. (유저 계정에 없어도 서비스 이름만 알면 true 가능)
+targetSaId: 사용자 계정 현황에 있는 saId. 없으면 null.
+actionType: 특정 조치 유형 (change_password, enable_2fa, logout_sessions, verify_activity, review_apps 등).
 showExitCta: 대화를 마무리하거나 다른 페이지로 안내할 때 true.`;
 
     try {
@@ -378,23 +350,34 @@ showExitCta: 대화를 마무리하거나 다른 페이지로 안내할 때 true
       const validSaIds = new Set(allSa.map((s) => s.id));
       const targetSaId = typeof raw.targetSaId === 'string' && validSaIds.has(raw.targetSaId) ? raw.targetSaId : null;
 
-      // actionType을 해당 SA의 실제 KB stepType으로 허용 목록 검증
+      // actionType: SA KB 또는 전역 stepType 화이트리스트
+      const globalStepTypes = new Set(Object.values(ACTION_KB).flat().map((k) => k.stepType));
       let actionType: string | null = null;
-      if (typeof raw.actionType === 'string' && targetSaId) {
-        const targetSa = allSa.find((s) => s.id === targetSaId);
-        if (targetSa) {
-          const validTypes = new Set([
-            ...getKbSteps(targetSa.primaryRiskType).map((k) => k.stepType),
-            ...targetSa.actionItems.map((a) => a.type),
-          ]);
-          actionType = validTypes.has(raw.actionType) ? raw.actionType : null;
+      if (typeof raw.actionType === 'string') {
+        if (targetSaId) {
+          const targetSa = allSa.find((s) => s.id === targetSaId);
+          if (targetSa) {
+            const validTypes = new Set([
+              ...getKbSteps(targetSa.primaryRiskType).map((k) => k.stepType),
+              ...targetSa.actionItems.map((a) => a.type),
+            ]);
+            actionType = validTypes.has(raw.actionType) ? raw.actionType : null;
+          }
+        }
+        if (!actionType && globalStepTypes.has(raw.actionType)) {
+          actionType = raw.actionType;
         }
       }
+
+      // showLink: SA가 없어도 registry에서 서비스를 찾을 수 있으면 허용 (OOD)
+      const registryHit = detectServiceFromText(userMessage);
+      const showLink =
+        raw.showLink === true && (!!targetSaId || !!registryHit || !!actionType);
 
       return {
         reply: typeof raw.reply === 'string' && raw.reply.trim() ? raw.reply.trim() : '보안 관련 궁금한 점이 있으시면 공식 사이트를 확인해보세요.',
         showActionList: raw.showActionList === true,
-        showLink: raw.showLink === true && !!targetSaId,
+        showLink,
         targetSaId,
         actionType,
         showExitCta: raw.showExitCta === true,
@@ -403,6 +386,121 @@ showExitCta: 대화를 마무리하거나 다른 페이지로 안내할 때 true
       this.logger.error('Solar 보안 도우미 호출 실패', (err as Error).message);
       return { reply: '죄송해요, 잠시 후 다시 시도해주세요.', showActionList: false, showLink: false, targetSaId: null, actionType: null, showExitCta: false };
     }
+  }
+
+  /**
+   * 공식 링크 카드 조립.
+   * 1) 유저 SA + actionItem.externalUrl / registry
+   * 2) 메시지에서 감지한 registry 서비스 (계정에 없어도 OK)
+   */
+  private buildOfficialLinkCard(opts: {
+    allSa: Awaited<ReturnType<typeof this.loadAllSa>>;
+    targetSaId: string | null;
+    actionType: string | null;
+    userMessage: string;
+  }): {
+    content: string;
+    externalCard: NonNullable<ChatMessageMeta['externalCard']>;
+    cardNews?: NonNullable<ChatMessageMeta['cardNews']>;
+  } | null {
+    const { allSa, targetSaId, actionType, userMessage } = opts;
+
+    const targetSa = targetSaId ? allSa.find((s) => s.id === targetSaId) : null;
+    if (targetSa) {
+      const registry = resolveService(targetSa.serviceName, targetSa.displayName);
+      const displayName = targetSa.displayName ?? cleanServiceName(targetSa.serviceName);
+      const kbEntries = getKbSteps(targetSa.primaryRiskType);
+      const targetItem = findBestActionForMessage(
+        targetSa.actionItems,
+        actionType,
+        userMessage,
+      );
+      const kbEntry = targetItem
+        ? matchKbEntry(targetSa.primaryRiskType, targetItem) ??
+          kbEntries.find((k) => k.stepType === targetItem.type)
+        : actionType
+          ? kbEntries.find((k) => k.stepType === actionType) ??
+            matchKbEntry(null, { type: actionType, title: actionType })
+          : kbEntries[0];
+
+      const kind = kbEntry?.officialUrlKind ?? 'security';
+      const url =
+        targetItem?.externalUrl ??
+        resolveKbUrl(
+          {
+            officialUrl: registry.officialUrl ?? undefined,
+            passwordUrl: registry.passwordUrl ?? undefined,
+            securityUrl: registry.securityUrl ?? undefined,
+          },
+          kind,
+        ) ??
+        registry.officialUrl;
+
+      if (url) {
+        return {
+          content: `${displayName} ${targetItem?.title ?? kbEntry?.title ?? '보안 설정'} 페이지로 바로 이동할 수 있어요!`,
+          externalCard: {
+            label: `${displayName} 공식`,
+            title: targetItem?.title ?? kbEntry?.title ?? displayName,
+            subtitle: targetItem?.description ?? kbEntry?.subtitle ?? null,
+            url,
+            domain: domainFromUrl(url),
+            trustLabel: '공식 페이지',
+            ctaLabel: '페이지로 이동',
+          },
+          cardNews: kbEntry?.cardNews ?? undefined,
+        };
+      }
+    }
+
+    // OOD / registry-only
+    const detected: ResolvedService | null = detectServiceFromText(userMessage);
+    if (!detected?.fromRegistry) return null;
+
+    const stepHint =
+      actionType ??
+      ( /비밀번호|password/i.test(userMessage)
+        ? 'change_password'
+        : /2단계|2fa|이중/i.test(userMessage)
+          ? 'enable_2fa'
+          : /기기|세션|로그아웃/i.test(userMessage)
+            ? 'logout_sessions'
+            : /앱|권한/i.test(userMessage)
+              ? 'review_apps'
+              : null);
+
+    const kbEntry = stepHint
+      ? matchKbEntry('security_recommendation', { type: stepHint, title: stepHint }) ??
+        Object.values(ACTION_KB)
+          .flat()
+          .find((k) => k.stepType === stepHint)
+      : matchKbEntry('password_reset', { type: 'change_password', title: '비밀번호' });
+
+    const kind = kbEntry?.officialUrlKind ?? 'security';
+    const url = resolveKbUrl(
+      {
+        officialUrl: detected.officialUrl ?? undefined,
+        passwordUrl: detected.passwordUrl ?? undefined,
+        securityUrl: detected.securityUrl ?? undefined,
+      },
+      kind,
+    );
+    if (!url) return null;
+
+    const title = kbEntry?.title ?? '보안 설정';
+    return {
+      content: `${detected.serviceName} ${title} 페이지로 바로 이동할 수 있어요!`,
+      externalCard: {
+        label: `${detected.serviceName} 공식`,
+        title,
+        subtitle: kbEntry?.subtitle ?? null,
+        url,
+        domain: domainFromUrl(url),
+        trustLabel: '공식 페이지',
+        ctaLabel: '페이지로 이동',
+      },
+      cardNews: kbEntry?.cardNews ?? undefined,
+    };
   }
 
   private async loadAllSa(userId: string) {
@@ -427,6 +525,16 @@ showExitCta: 대화를 마무리하거나 다른 페이지로 안내할 때 true
       chatId,
       messages: messages.map(buildMsgDto),
     };
+  }
+}
+
+function domainFromUrl(url: string | null): string | null {
+  if (!url) return null;
+  try {
+    const u = new URL(url);
+    return (u.hostname + u.pathname).replace(/\/$/, '');
+  } catch {
+    return null;
   }
 }
 
