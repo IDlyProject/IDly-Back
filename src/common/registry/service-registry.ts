@@ -119,22 +119,42 @@ export const SERVICE_REGISTRY: ServiceRegistryItem[] = [
     passwordUrl: 'https://www.coupang.com/member/findPassword',
     securityUrl: 'https://www.coupang.com/member/account/memberInfo',
   },
+  {
+    serviceName: '사람인',
+    aliases: ['사람인', 'saramin', 'mailinfo.saramin.co.kr', 'saramin.co.kr'],
+    domain: 'saramin.co.kr',
+    officialUrl: 'https://www.saramin.co.kr',
+    securityUrl: 'https://account.saramin.co.kr',
+  },
 ];
 
 const CLEARBIT_BASE = 'https://logo.clearbit.com';
 
 export function cleanServiceName(raw: string): string {
-  // "Name | Description <email@domain>" → "Name"
-  const pipeClean = raw.split('|')[0].trim();
-  // "<email@domain>" or "email@domain" → extract domain
-  const angleMatch = pipeClean.match(/^<([^>]+)>$/);
+  // 파이프로 분리한 뒤 유효한 토큰 선택
+  const tokens = raw.split('|').map((t) => t.trim()).filter(Boolean);
+
+  // 이메일 주소 패턴 (단독 토큰이거나 <email> 형태)
+  const isEmailToken = (t: string) =>
+    /^<[^>]+@[^>]+>$/.test(t) || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(t);
+
+  // 첫 번째 토큰이 이메일이면 두 번째 토큰 시도
+  let candidate = tokens[0] ?? raw;
+  if (isEmailToken(candidate) && tokens[1]) {
+    candidate = tokens[1];
+  }
+
+  // "<email@domain>" 단독 토큰 처리
+  const angleMatch = candidate.match(/^<([^>]+)>$/);
   if (angleMatch) {
     const inner = angleMatch[1];
     const domain = inner.split('@')[1];
     return domain ? domain.split('.')[0] : inner;
   }
-  // Remove trailing <email> if present
-  return pipeClean.replace(/\s*<[^>]+>\s*$/, '').trim() || raw;
+
+  // 후미 <email> 제거
+  const cleaned = candidate.replace(/\s*<[^>]+>\s*$/, '').trim();
+  return cleaned || raw;
 }
 
 export function resolveService(...candidates: (string | null | undefined)[]): {
