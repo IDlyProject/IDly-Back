@@ -57,7 +57,7 @@ class SendMessageDto {
     description:
       'dynamic 화면 이벤트 타입. action_select는 조치 카드 선택, feedback은 완료/실패 버튼, failure_reason은 실패 사유 입력입니다.',
   })
-  @IsEnum(['action_select', 'feedback', 'failure_reason'])
+  @IsIn(['action_select', 'feedback', 'failure_reason'])
   type: 'action_select' | 'feedback' | 'failure_reason';
 
   @ApiProperty({
@@ -253,7 +253,8 @@ export class RisksController {
   @ApiParam({ name: 'serviceAccountId' })
   @ApiResponse({
     status: 200,
-    description: '세션 정보 또는 null',
+    description:
+      '세션 정보 반환. 아직 세션이 없거나 완료 후 미결 필수 조치가 남은 경우 `null` 반환 — 클라이언트는 null 체크 후 POST /action-session으로 세션을 생성하세요.',
     schema: {
       example: {
         sessionId: 'session-uuid',
