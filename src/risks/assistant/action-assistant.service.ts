@@ -225,8 +225,8 @@ export class ActionAssistantService {
         status: 'active',
         activeActionItemId: firstRequired?.id ?? null,
         feedbackEnabled: bootstrapFirstAction && !!firstRequired,
-        composerEnabled: true,
-        composerPlaceholder: '보안 관련 궁금한 점이 있으시면 물어보세요',
+        composerEnabled: false,
+        composerPlaceholder: null,
         messages: {
           create: messages.map((m) => ({
             role: m.role,
@@ -293,7 +293,7 @@ export class ActionAssistantService {
 
       this.appendActionMessages(assistantMsgs, item, displayName, registry, items);
 
-      sessionPatch = { activeActionItemId: item.id, feedbackEnabled: true, composerEnabled: true, composerPlaceholder: '보안 관련 궁금한 점이 있으시면 물어보세요' };
+      sessionPatch = { activeActionItemId: item.id, feedbackEnabled: true, composerEnabled: false, composerPlaceholder: null };
 
     } else if (body.type === 'feedback') {
       if (!body.feedbackValue) throw new BadRequestException('feedbackValue 필수');
@@ -387,7 +387,7 @@ export class ActionAssistantService {
             metadata: { actionList: { title: '남은 조치 사항', actionIds: updatedItems.map((i) => i.id) } },
           });
 
-          sessionPatch = { activeActionItemId: null, feedbackEnabled: false, composerEnabled: true, composerPlaceholder: '보안 관련 궁금한 점이 있으시면 물어보세요' };
+          sessionPatch = { activeActionItemId: null, feedbackEnabled: false, composerEnabled: false, composerPlaceholder: null };
         }
 
       } else {
@@ -445,7 +445,7 @@ export class ActionAssistantService {
       // URL 재제시 + tip + feedback
       this.appendActionMessages(assistantMsgs, item, displayName, registry, items);
 
-      sessionPatch = { composerEnabled: true, composerPlaceholder: '보안 관련 궁금한 점이 있으시면 물어보세요', feedbackEnabled: true, activeActionItemId: item.id };
+      sessionPatch = { composerEnabled: false, composerPlaceholder: null, feedbackEnabled: true, activeActionItemId: item.id };
 
     } else {
       // user_text — Light RAG chatbot
