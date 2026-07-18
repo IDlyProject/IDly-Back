@@ -317,6 +317,9 @@ export class ActionAssistantService {
     if (bootstrapFirstAction && firstRequired) {
       messages.push({ role: 'user', type: 'user_chip', content: firstRequired.title });
       this.appendActionMessages(messages, firstRequired, displayName, registry, items, sa.primaryRiskType);
+    } else {
+      // 자동 선택 없는 경우 — Figma 설계: 조치 선택 유도 텍스트
+      messages.push({ role: 'assistant', type: 'text', content: '이 조치들 중 하나부터 시작해 보세요.' });
     }
 
     // DB에 세션 + 메시지 저장
