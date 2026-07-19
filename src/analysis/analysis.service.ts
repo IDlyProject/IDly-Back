@@ -18,48 +18,34 @@ import { PrismaService } from '../prisma/prisma.service';
 import { GmailService } from '../gmail/gmail.service';
 import { resolveService } from '../common/registry/service-registry';
 import { planKbActionMerge } from '../risks/policy/action-kb';
-import { ANALYSIS_ORPHAN_TTL_MS } from '../common/domain/status';
+import {
+  ANALYSIS_COOLDOWN_MS,
+  ANALYSIS_ORPHAN_TTL_MS,
+  nextAnalysisAccountStatus,
+} from '../common/domain/status';
 import { SolarService } from '../common/solar/solar.service';
-import { computeSecurityScore, isActiveForHomeMetrics } from '../common/domain/metrics';
+import {
+  computeSecurityScore,
+  isActiveForHomeMetrics,
+} from '../common/domain/metrics';
 import type { AccountStatus, RiskLevel } from '../common/domain/status';
-
-type AiSecurityLevel = '위험' | '주의' | '양호';
-
-interface AiProblemMail {
-  subject?: string;
-  date?: string;
-  body?: string;
-  matched_keywords?: string;
-}
-
-interface AiAccountAnalysis {
-  account_id?: string;
-  account?: string;
-  security_score?: number;
-  security_level?: AiSecurityLevel | string;
-  interpretation?: string;
-  problem_mails?: AiProblemMail[];
-}
-
-interface AiAnalyzeResponse {
-  accounts?: AiAccountAnalysis[];
-}
-
-type RiskType =
-  | 'new_device_login'
-  | 'password_reset'
-  | 'verification_code'
-  | 'account_recovery'
-  | 'permission_grant'
-  | 'security_recommendation';
-
-const FORCE_HIGH_RISK_TYPES = new Set<RiskType>([
-  'new_device_login',
-  'password_reset',
-  'verification_code',
-  'account_recovery',
-]);
-const ANALYSIS_COOLDOWN_MS = 60_000;
+import { gmailAccountLogRef } from '../common/logging/redact';
+import { withRetry } from '../common/http/with-retry';
+import {
+  isEmptyAiAnalyzeResult,
+  parseAiAnalyzeResponse,
+  sanitizeAiInterpretation,
+  type AiAccountAnalysis,
+  type AiAnalyzeResponse,
+  type AiProblemMail,
+} from './ai-analyze-response';
+import {
+  inferRiskType,
+  riskLevelToAccountStatus,
+  toHeadline,
+  toRiskLevel,
+  type RiskType,
+} from './ai-risk-mapping';
 
 const STEP_MESSAGES: Record<string, string> = {
   waiting: '분석을 준비하고 있어요.',
@@ -108,8 +94,6 @@ export class AnalysisService implements OnModuleInit {
   }
 
   async startAnalysis(userId: string, mailAccountIds?: string[]) {
-    await this.recoverOrphanRuns();
-
     const accounts = await this.prisma.gmailAccount.findMany({
       where: {
         userId,
@@ -125,7 +109,11 @@ export class AnalysisService implements OnModuleInit {
     }
 
     const running = await this.prisma.analysisRun.findFirst({
-      where: { userId, status: { in: ['queued', 'scanning'] } },
+      where: {
+        userId,
+        status: { in: ['queued', 'scanning'] },
+        startedAt: { gte: new Date(Date.now() - ANALYSIS_ORPHAN_TTL_MS) },
+      },
     });
     if (running) {
       return {
@@ -139,6 +127,7 @@ export class AnalysisService implements OnModuleInit {
     const recentRun = await this.prisma.analysisRun.findFirst({
       where: {
         userId,
+        status: { in: ['queued', 'scanning', 'completed'] },
         startedAt: { gte: new Date(Date.now() - ANALYSIS_COOLDOWN_MS) },
       },
       orderBy: { startedAt: 'desc' },
@@ -215,7 +204,8 @@ export class AnalysisService implements OnModuleInit {
 
       for (const account of accounts) {
         await this.updateStep(runId, 'collecting_account_signals', 30);
-        this.logger.log(`[${account.email}] mbox 수집 시작`);
+        const accountRef = gmailAccountLogRef(account);
+        this.logger.log(`[${accountRef}] mbox 수집 시작`);
 
         gmailAttempts += 1;
         let tmpPath: string | null = null;
@@ -229,19 +219,19 @@ export class AnalysisService implements OnModuleInit {
           gmailSuccesses += 1;
         } catch (e) {
           const msg = this.safeErrorMessage(e);
-          this.logger.error(`[${account.email}] Gmail 수집 실패: ${msg}`);
-          partialErrors.push(`${account.email}: gmail_fetch_failed`);
+          this.logger.error(`[${accountRef}] Gmail 수집 실패: ${msg}`);
+          partialErrors.push(`${account.id}: gmail_fetch_failed`);
           continue;
         }
 
         if (count === 0) {
-          this.logger.warn(`[${account.email}] 메일 없음, 건너뜀`);
+          this.logger.warn(`[${accountRef}] 메일 없음, 건너뜀`);
           if (tmpPath) unlink(tmpPath, () => {});
           continue;
         }
 
         this.logger.log(
-          `[${account.email}] ${count}개, ${sizeBytes} bytes → AI 전송`,
+          `[${accountRef}] ${count}개, ${sizeBytes} bytes → AI 전송`,
         );
 
         aiAttempts += 1;
@@ -251,12 +241,25 @@ export class AnalysisService implements OnModuleInit {
           aiSuccesses += 1;
         } catch (e) {
           const msg = this.safeErrorMessage(e);
-          this.logger.error(`[${account.email}] AI 분석 실패: ${msg}`);
-          partialErrors.push(`${account.email}: ai_analyze_failed`);
+          this.logger.error(`[${accountRef}] AI 분석 실패: ${msg}`);
+          partialErrors.push(`${account.id}: ai_analyze_failed`);
           continue;
         } finally {
           if (tmpPath) unlink(tmpPath, () => {});
           tmpPath = null;
+        }
+
+        // HTTP/파싱 성공이어도 accounts 가 비면 홈 카드가 안 생김 — 관측 + partial 기록
+        // (run status shape 동일: completed 가능, failedReason에 partial_errors)
+        if (isEmptyAiAnalyzeResult(aiResult)) {
+          this.logger.warn(
+            `[${accountRef}] AI 응답 accounts 비어 있음 — SA 갱신 없음`,
+          );
+          partialErrors.push(`${account.id}: ai_empty_accounts`);
+        } else {
+          this.logger.log(
+            `[${accountRef}] AI accounts=${aiResult.accounts?.length ?? 0}`,
+          );
         }
 
         await this.updateStep(runId, 'preparing_home', 70);
@@ -325,7 +328,12 @@ export class AnalysisService implements OnModuleInit {
           where: { status: { notIn: ['dormant', 'skipped'] } },
           include: {
             riskEvidences: {
-              select: { id: true, subject: true, summary: true, riskType: true },
+              select: {
+                id: true,
+                subject: true,
+                summary: true,
+                riskType: true,
+              },
               orderBy: [{ receivedAt: 'desc' }, { createdAt: 'desc' }],
               take: 3,
             },
@@ -335,7 +343,9 @@ export class AnalysisService implements OnModuleInit {
     });
 
     const serviceAccounts = gmailAccounts.flatMap((ga) => ga.serviceAccounts);
-    const activeServices = serviceAccounts.filter((sa) => sa.riskLevel !== 'safe');
+    const activeServices = serviceAccounts.filter(
+      (sa) => sa.riskLevel !== 'safe',
+    );
     if (activeServices.length === 0) return;
 
     // high risk 서비스 우선, 서비스당 최대 2개 evidence — Solar 프롬프트 품질 유지
@@ -344,10 +354,14 @@ export class AnalysisService implements OnModuleInit {
       (a, b) => (riskOrder[a.riskLevel] ?? 3) - (riskOrder[b.riskLevel] ?? 3),
     );
     const evidences = sortedServices.flatMap((sa) =>
-      sa.riskEvidences.slice(0, 2).map((e) => ({ ...e, serviceAccountId: sa.id })),
+      sa.riskEvidences
+        .slice(0, 2)
+        .map((e) => ({ ...e, serviceAccountId: sa.id })),
     );
 
-    const activeAll = serviceAccounts.filter((a) => isActiveForHomeMetrics(a.status));
+    const activeAll = serviceAccounts.filter((a) =>
+      isActiveForHomeMetrics(a.status),
+    );
     const score = computeSecurityScore(activeAll);
 
     const snapshot = await this.solarService.generateReportSnapshot(
@@ -359,7 +373,9 @@ export class AnalysisService implements OnModuleInit {
           riskLevel: sa.riskLevel,
           primaryRiskType: sa.primaryRiskType,
           interpretation: sa.interpretation,
-          evidenceSubjects: sa.riskEvidences.map((e) => e.subject ?? '').filter(Boolean),
+          evidenceSubjects: sa.riskEvidences
+            .map((e) => e.subject ?? '')
+            .filter(Boolean),
         })),
       },
       evidences,
@@ -409,18 +425,17 @@ export class AnalysisService implements OnModuleInit {
       contentType: 'application/mbox',
     });
 
-    const { data } = await firstValueFrom(
-      this.httpService.post(`${aiUrl}/analyze`, form, {
-        headers: form.getHeaders(),
-        timeout: 300_000,
-      }),
+    const { data } = await withRetry(() =>
+      firstValueFrom(
+        this.httpService.post(`${aiUrl}/analyze`, form, {
+          headers: form.getHeaders(),
+          timeout: 300_000,
+        }),
+      ),
     );
 
-    // Loose shape check — reject clearly invalid AI payloads
-    if (data == null || typeof data !== 'object') {
-      throw new Error('AI response is not an object');
-    }
-    return data as AiAnalyzeResponse;
+    // 내부 스키마 검증 — 실패 시 throw → 기존 run failed 경로 (클라이언트 status 필드 동일)
+    return parseAiAnalyzeResponse(data);
   }
 
   private async saveResults(
@@ -516,8 +531,8 @@ export class AnalysisService implements OnModuleInit {
           status,
           primaryRiskType,
           headline: riskLevel !== 'safe' ? this.toHeadline(riskLevel) : null,
-          summary: ai.interpretation ?? null,
-          interpretation: ai.interpretation ?? null,
+          summary: sanitizeAiInterpretation(ai.interpretation) ?? null,
+          interpretation: sanitizeAiInterpretation(ai.interpretation) ?? null,
           skippedAt:
             status === 'skipped' ? (existing?.skippedAt ?? null) : null,
           resolvedAt:
@@ -533,8 +548,8 @@ export class AnalysisService implements OnModuleInit {
           status,
           primaryRiskType,
           headline: riskLevel !== 'safe' ? this.toHeadline(riskLevel) : null,
-          summary: ai.interpretation ?? null,
-          interpretation: ai.interpretation ?? null,
+          summary: sanitizeAiInterpretation(ai.interpretation) ?? null,
+          interpretation: sanitizeAiInterpretation(ai.interpretation) ?? null,
           skippedAt:
             status === 'skipped'
               ? (existing?.skippedAt ?? null)
@@ -579,10 +594,15 @@ export class AnalysisService implements OnModuleInit {
       });
 
       // non-safe 계정은 매 분석마다 KB merge — enrich 스크립트/특정 메일함에 의존하지 않도록 일반화
-      const shouldRefreshActions = riskLevel !== 'safe' && Boolean(primaryRiskType);
+      const shouldRefreshActions =
+        riskLevel !== 'safe' && Boolean(primaryRiskType);
 
       if (shouldRefreshActions) {
-        const plan = planKbActionMerge(existingActions, primaryRiskType, registry);
+        const plan = planKbActionMerge(
+          existingActions,
+          primaryRiskType,
+          registry,
+        );
 
         for (const u of plan.updates) {
           await this.prisma.actionItem.update({
@@ -632,48 +652,18 @@ export class AnalysisService implements OnModuleInit {
     }
   }
 
-  // ─── 분류 ──────────────────────────────────────────────────────────────────
+  // ─── 분류 (순수 로직: ai-risk-mapping / domain/status) ─────────────────────
 
   private toRiskLevel(
     level?: string,
     score?: number,
     riskType?: RiskType | null,
   ): RiskLevel {
-    const normalizedScore =
-      typeof score === 'number' && Number.isFinite(score) ? score : null;
-    const hasForceHighRisk = riskType
-      ? FORCE_HIGH_RISK_TYPES.has(riskType)
-      : false;
-
-    if (level === '위험') {
-      if (hasForceHighRisk || (normalizedScore ?? 0) >= 7) return 'high';
-      return 'medium';
-    }
-
-    if (level === '주의') {
-      if (hasForceHighRisk || (normalizedScore ?? 0) >= 8) return 'high';
-      return 'medium';
-    }
-
-    if (level === '양호') {
-      if ((normalizedScore ?? 0) >= 6 && hasForceHighRisk) return 'medium';
-      if ((normalizedScore ?? 0) >= 4) return 'low';
-      return 'safe';
-    }
-
-    if (normalizedScore === null) return hasForceHighRisk ? 'medium' : 'safe';
-    if (hasForceHighRisk && normalizedScore >= 4) return 'high';
-    if (normalizedScore >= 7) return 'high';
-    if (normalizedScore >= 4) return 'medium';
-    if (normalizedScore > 0) return 'low';
-    return 'safe';
+    return toRiskLevel(level, score, riskType);
   }
 
   private toStatus(riskLevel: RiskLevel): AccountStatus {
-    if (riskLevel === 'high' || riskLevel === 'medium')
-      return 'action_required';
-    if (riskLevel === 'low') return 'watch';
-    return 'safe';
+    return riskLevelToAccountStatus(riskLevel);
   }
 
   private nextStatus(
@@ -681,52 +671,19 @@ export class AnalysisService implements OnModuleInit {
     computedStatus: AccountStatus,
     hasNewEvidence: boolean,
   ): AccountStatus {
-    if (
-      !hasNewEvidence &&
-      (existingStatus === 'resolved' || existingStatus === 'skipped')
-    ) {
-      return existingStatus;
-    }
-    if (existingStatus === 'dormant') return 'dormant';
-    return computedStatus;
+    return nextAnalysisAccountStatus(
+      existingStatus,
+      computedStatus,
+      hasNewEvidence,
+    );
   }
 
   private toHeadline(riskLevel: RiskLevel): string {
-    if (riskLevel === 'high') return '오늘 안에 확인 필요';
-    if (riskLevel === 'medium') return '확인이 필요해요';
-    return '지켜보는 중이에요';
+    return toHeadline(riskLevel);
   }
 
   private inferRiskType(ai: AiAccountAnalysis): RiskType {
-    const haystack = [
-      ai.interpretation,
-      ...(ai.problem_mails ?? []).flatMap((m) => [
-        m.subject,
-        m.matched_keywords,
-        m.body,
-      ]),
-    ]
-      .filter(Boolean)
-      .join('\n')
-      .toLowerCase();
-
-    if (this.has(haystack, ['새 기기', '새 로그인', 'new device', 'new login']))
-      return 'new_device_login';
-    if (this.has(haystack, ['비밀번호 재설정', 'password reset', 'recover']))
-      return 'password_reset';
-    if (
-      this.has(haystack, ['인증 코드', 'verification code', 'otp', '인증번호'])
-    )
-      return 'verification_code';
-    if (this.has(haystack, ['계정 복구', 'account recovery']))
-      return 'account_recovery';
-    if (this.has(haystack, ['권한', 'permission', 'authorized app']))
-      return 'permission_grant';
-    return 'security_recommendation';
-  }
-
-  private has(text: string, keywords: string[]): boolean {
-    return keywords.some((kw) => text.includes(kw.toLowerCase()));
+    return inferRiskType(ai);
   }
 
   private buildEvidenceHash(serviceName: string, mail: AiProblemMail): string {
@@ -797,6 +754,4 @@ export class AnalysisService implements OnModuleInit {
     };
     return map[riskType];
   }
-
 }
-

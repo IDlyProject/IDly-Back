@@ -4,10 +4,11 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
-import { createHash, randomBytes } from 'crypto';
+import { randomBytes } from 'crypto';
 import { google } from 'googleapis';
 import { UsersService } from '../users/users.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { hashOpaqueToken } from '../common/crypto/opaque-token';
 
 @Injectable()
 export class AuthService {
@@ -224,6 +225,6 @@ export class AuthService {
   }
 
   private hashToken(raw: string): string {
-    return createHash('sha256').update(raw).digest('hex');
+    return hashOpaqueToken(raw);
   }
 }

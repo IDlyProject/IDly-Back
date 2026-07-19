@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
+import { withRetry } from '../http/with-retry';
 
 export interface ReportSnapshotInput {
   services: {
@@ -52,23 +53,28 @@ export class SolarService {
     const prompt = this.buildPrompt(input, evidences);
 
     try {
-      const { data } = await firstValueFrom(
-        this.http.post(
-          this.SOLAR_URL,
-          {
-            model: 'solar-pro',
-            messages: [{ role: 'user', content: prompt }],
-            response_format: { type: 'json_object' },
-            temperature: 0.3,
-          },
-          {
-            headers: {
-              Authorization: `Bearer ${apiKey}`,
-              'Content-Type': 'application/json',
-            },
-            timeout: 30_000,
-          },
-        ),
+      // 일시 장애만 재시도 — 최종 실패 시 null (기존 계약: 스냅샷 없으면 FE가 폴백)
+      const { data } = await withRetry(
+        () =>
+          firstValueFrom(
+            this.http.post(
+              this.SOLAR_URL,
+              {
+                model: 'solar-pro',
+                messages: [{ role: 'user', content: prompt }],
+                response_format: { type: 'json_object' },
+                temperature: 0.3,
+              },
+              {
+                headers: {
+                  Authorization: `Bearer ${apiKey}`,
+                  'Content-Type': 'application/json',
+                },
+                timeout: 30_000,
+              },
+            ),
+          ),
+        { maxAttempts: 2, baseDelayMs: 500 },
       );
 
       const content = data.choices?.[0]?.message?.content;

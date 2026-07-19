@@ -61,7 +61,13 @@ export class AnalysisController {
 1. Gmail 계정별 mbox 수집
 2. AI 서버 분석 결과 수신
 3. 서비스 계정별 \`riskLevel\`, \`status\`, \`primaryRiskType\`, 근거 메일, 조치 가이드 저장
-4. 홈 화면은 \`GET /api/home\`에서 저장된 서비스 계정 결과를 다시 집계해 카드·점수·위험요약으로 반환`,
+4. 홈 화면은 \`GET /api/home\`에서 저장된 서비스 계정 결과를 다시 집계해 카드·점수·위험요약으로 반환
+
+**AI 위험도 가공 기준**
+- AI \`security_score\`는 서비스별 위험 신호 강도로 해석합니다. 홈/리포트의 \`securityScore\`는 저장된 \`riskLevel\`을 재집계한 전체 보안 점수입니다.
+- \`security_level\`, \`security_score\`, 근거 메일 키워드로 추론한 \`primaryRiskType\`을 함께 사용해 \`riskLevel\`을 산정합니다.
+- 새 기기 로그인, 비밀번호 재설정, 인증코드, 계정 복구 신호는 낮은 위험도로 묻히지 않도록 보수적으로 보정합니다.
+- 중복 근거는 \`evidenceHash\`로 제거하고, 조치 URL은 AI 생성값이 아닌 백엔드 service registry/action KB만 사용합니다.`,
   })
   @ApiBody({ type: StartAnalysisDto, required: false })
   @ApiResponse({
