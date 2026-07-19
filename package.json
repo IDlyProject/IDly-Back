@@ -6,7 +6,7 @@
   "private": true,
   "license": "UNLICENSED",
   "scripts": {
-    "build": "prisma generate && node --max-old-space-size=460 node_modules/.bin/nest build",
+    "build": "prisma generate && nest build --builder swc",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "nest start",
     "start:dev": "nest start --watch",
@@ -49,6 +49,8 @@
     "@nestjs/cli": "^11.0.0",
     "@nestjs/schematics": "^11.0.0",
     "@nestjs/testing": "^11.0.1",
+    "@swc/cli": "^0.8.1",
+    "@swc/core": "^1.15.46",
     "@types/cookie-parser": "^1.4.10",
     "@types/express": "^5.0.0",
     "@types/form-data": "^2.2.1",
