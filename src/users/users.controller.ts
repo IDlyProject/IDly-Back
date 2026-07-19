@@ -9,6 +9,7 @@ import {
   Patch,
   Post,
   Req,
+  Res,
   UseGuards,
 } from '@nestjs/common';
 import {
@@ -252,8 +253,13 @@ export class UsersController {
       },
     },
   })
-  async deleteMe(@Req() req, @Body() body: DeleteAccountDto) {
-    return this.usersService.deleteAccount(req.user.sub, body);
+  async deleteMe(@Req() req, @Res({ passthrough: true }) res, @Body() body: DeleteAccountDto) {
+    const result = await this.usersService.deleteAccount(req.user.sub, body);
+    const isProd = process.env.NODE_ENV === 'production';
+    const base = { httpOnly: true, secure: isProd, sameSite: (isProd ? 'none' : 'lax') as 'none' | 'lax' };
+    res.clearCookie('idly_token', base);
+    res.clearCookie('idly_refresh', { ...base, path: '/api/auth' });
+    return result;
   }
 
   @Delete('me/accounts/:accountId')
