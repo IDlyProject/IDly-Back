@@ -41,12 +41,10 @@ export async function withRetry<T>(
   );
   const resolveStatus = options?.resolveStatus ?? defaultStatus;
 
-  let lastError: unknown;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
       return await fn();
     } catch (err: unknown) {
-      lastError = err;
       const status = resolveStatus(err);
       const canRetry =
         status !== undefined && retryable.has(status) && attempt < maxAttempts;
@@ -54,7 +52,6 @@ export async function withRetry<T>(
       await new Promise((r) => setTimeout(r, baseDelayMs * 2 ** (attempt - 1)));
     }
   }
-  throw lastError instanceof Error
-    ? lastError
-    : new Error('withRetry: exhausted attempts');
+  // unreachable — loop always throws on final attempt
+  throw new Error('withRetry: exhausted attempts');
 }

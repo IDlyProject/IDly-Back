@@ -77,16 +77,8 @@ export class GmailService {
     return Number.isFinite(value) && value > 0 ? value : fallback;
   }
 
-  private async writeMboxChunk(
-    writer: WriteStream,
-    chunk: string | Buffer,
-    encoding?: BufferEncoding,
-  ) {
-    const ok =
-      typeof chunk === 'string' && encoding
-        ? writer.write(chunk, encoding)
-        : writer.write(chunk);
-    if (!ok) await once(writer, 'drain');
+  private async writeMboxChunk(writer: WriteStream, chunk: string | Buffer) {
+    if (!writer.write(chunk)) await once(writer, 'drain');
   }
 
   /**
@@ -182,7 +174,11 @@ export class GmailService {
         );
 
         for (const result of results) {
-          if (result.status === 'rejected') continue;
+          if (result.status === 'rejected') {
+            if (this.isAuthError(result.reason)) throw result.reason;
+            this.logger.warn(`message fetch failed: ${(result.reason as Error)?.message ?? result.reason}`);
+            continue;
+          }
           const msg = (result.value as any).data;
           if (!msg?.raw) continue;
 
@@ -199,9 +195,9 @@ export class GmailService {
             lastEmailDate = emailDate;
 
           const header = `From mboxrd@localhost ${emailDate.toUTCString()}\n`;
-          await this.writeMboxChunk(writer, header, 'binary');
+          await this.writeMboxChunk(writer, header);
           await this.writeMboxChunk(writer, rawBytes);
-          await this.writeMboxChunk(writer, '\n\n', 'binary');
+          await this.writeMboxChunk(writer, '\n\n');
           sizeBytes +=
             Buffer.byteLength(header, 'binary') + rawBytes.byteLength + 2;
           count += 1;

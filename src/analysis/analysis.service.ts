@@ -30,6 +30,7 @@ import {
 } from '../common/domain/metrics';
 import type { AccountStatus, RiskLevel } from '../common/domain/status';
 import { gmailAccountLogRef } from '../common/logging/redact';
+import { withRetry } from '../common/http/with-retry';
 import {
   isEmptyAiAnalyzeResult,
   parseAiAnalyzeResponse,
@@ -108,7 +109,11 @@ export class AnalysisService implements OnModuleInit {
     }
 
     const running = await this.prisma.analysisRun.findFirst({
-      where: { userId, status: { in: ['queued', 'scanning'] } },
+      where: {
+        userId,
+        status: { in: ['queued', 'scanning'] },
+        startedAt: { gte: new Date(Date.now() - ANALYSIS_ORPHAN_TTL_MS) },
+      },
     });
     if (running) {
       return {
@@ -122,6 +127,7 @@ export class AnalysisService implements OnModuleInit {
     const recentRun = await this.prisma.analysisRun.findFirst({
       where: {
         userId,
+        status: { in: ['queued', 'scanning', 'completed'] },
         startedAt: { gte: new Date(Date.now() - ANALYSIS_COOLDOWN_MS) },
       },
       orderBy: { startedAt: 'desc' },
@@ -419,11 +425,13 @@ export class AnalysisService implements OnModuleInit {
       contentType: 'application/mbox',
     });
 
-    const { data } = await firstValueFrom(
-      this.httpService.post(`${aiUrl}/analyze`, form, {
-        headers: form.getHeaders(),
-        timeout: 300_000,
-      }),
+    const { data } = await withRetry(() =>
+      firstValueFrom(
+        this.httpService.post(`${aiUrl}/analyze`, form, {
+          headers: form.getHeaders(),
+          timeout: 300_000,
+        }),
+      ),
     );
 
     // 내부 스키마 검증 — 실패 시 throw → 기존 run failed 경로 (클라이언트 status 필드 동일)
