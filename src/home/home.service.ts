@@ -11,19 +11,19 @@ const CARD_NEWS = [
     id: 'cn_001',
     emoji: '🏠',
     title: '불 꺼진 창문, 그냥 두면 위험한 이유',
-    url: 'https://idly.kr/news/1',
+    url: 'https://www.instagram.com/idly__apt/',
   },
   {
     id: 'cn_002',
     emoji: '🔑',
     title: '비밀번호 하나로 다 쓰면 생기는 일',
-    url: 'https://idly.kr/news/2',
+    url: 'https://www.instagram.com/idly__apt/',
   },
   {
     id: 'cn_003',
     emoji: '📱',
     title: '2단계 인증, 이렇게 하면 더 안전해요',
-    url: 'https://idly.kr/news/3',
+    url: 'https://www.instagram.com/idly__apt/',
   },
 ];
 
