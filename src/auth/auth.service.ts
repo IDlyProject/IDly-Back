@@ -56,6 +56,15 @@ export class AuthService {
     });
   }
 
+  /** 유저 존재 여부 확인 — 탈퇴 후 잔존 쿠키로 add-account 모드 진입 방지 */
+  async userExists(userId: string): Promise<boolean> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true },
+    });
+    return !!user;
+  }
+
   /** JWT 검증 — 추가 Gmail 연결 시 기존 로그인 유저를 안전하게 식별 */
   verifyToken(token: string) {
     try {

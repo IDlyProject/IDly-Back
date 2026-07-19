@@ -108,7 +108,7 @@ export class AuthController {
     `.trim(),
   })
   @ApiResponse({ status: 302, description: 'Google OAuth 페이지로 리다이렉트' })
-  googleAuth(@Req() req: Request, @Res() res: Response) {
+  async googleAuth(@Req() req: Request, @Res() res: Response) {
     const cookieToken = (req as any).cookies?.[this.ACCESS_COOKIE];
     const authHeader = req.headers.authorization as string | undefined;
     const rawToken = authHeader?.startsWith('Bearer ')
@@ -119,12 +119,13 @@ export class AuthController {
 
     if (rawToken) {
       const payload = this.authService.verifyToken(rawToken);
-      if (!payload?.sub) {
-        throw new BadRequestException(
-          '유효하지 않은 토큰입니다. 다시 로그인해 주세요.',
-        );
+      if (payload?.sub) {
+        const exists = await this.authService.userExists(payload.sub);
+        if (exists) {
+          userId = payload.sub;
+        }
+        // 유저가 삭제된 경우(탈퇴 후 쿠키 잔존) → 신규 로그인으로 처리
       }
-      userId = payload.sub;
     }
 
     const url = userId
