@@ -9,7 +9,7 @@ describe('resolveService', () => {
     );
 
     expect(service.serviceName).toBe('Netflix');
-    expect(service.iconUrl).toBe('https://logo.clearbit.com/netflix.com');
+    expect(service.iconUrl).toBe('https://www.google.com/s2/favicons?domain=netflix.com&sz=128');
   });
 
   it('does not treat x.com alias as substring of netflix.com', () => {
