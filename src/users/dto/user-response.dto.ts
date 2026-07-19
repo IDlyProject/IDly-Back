@@ -11,15 +11,10 @@ export class ServiceAccountSummaryDto {
   riskLevel: string;
 
   @ApiProperty({
-    enum: [
-      'action_required',
-      'watch',
-      'safe',
-      'resolved',
-      'skipped',
-      'dormant',
-    ],
+    enum: ['action_required', 'watch', 'safe', 'resolved', 'dormant'],
     example: 'action_required',
+    description:
+      '계정 관리/프로필 응답에 노출되는 서비스 상태. 과거 skipped 데이터는 프론트 디자인에서 제거되어 응답에서 제외됩니다.',
   })
   status: string;
 
