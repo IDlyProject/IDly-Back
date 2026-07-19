@@ -281,7 +281,7 @@ export const SERVICE_REGISTRY: ServiceRegistryItem[] = [
   },
 ];
 
-const CLEARBIT_BASE = 'https://logo.clearbit.com';
+
 
 export function cleanServiceName(raw: string): string {
   const tokens = raw.split('|').map((t) => t.trim()).filter(Boolean);
@@ -365,7 +365,7 @@ export function resolveService(...candidates: (string | null | undefined)[]): Re
     const found = best.item;
     return {
       serviceName: found.serviceName,
-      iconUrl: `${CLEARBIT_BASE}/${found.domain}`,
+      iconUrl: `https://www.google.com/s2/favicons?domain=${found.domain}&sz=128`,
       iconLabel: found.serviceName[0].toUpperCase(),
       officialUrl: found.officialUrl,
       passwordUrl: found.passwordUrl ?? null,
