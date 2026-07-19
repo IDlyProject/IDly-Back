@@ -5,7 +5,7 @@ import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
-import { PrismaExceptionFilter } from './common/filters/prisma-exception.filter';
+import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
@@ -52,7 +52,7 @@ async function bootstrap() {
   });
 
   app.use(cookieParser());
-  app.useGlobalFilters(new PrismaExceptionFilter());
+  app.useGlobalFilters(new AllExceptionsFilter());
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
@@ -141,12 +141,16 @@ async function bootstrap() {
 
   const port = process.env.PORT ?? 3000;
   await app.listen(port);
-  console.log(`IDly backend running on port ${port}`);
+  const baseUrl =
+    process.env.NODE_ENV === 'production'
+      ? (process.env.SERVER_URL ?? `https://idly-back.onrender.com`)
+      : `http://localhost:${port}`;
+  console.log(`IDly backend running — ${baseUrl}`);
   if (enableSwagger) {
-    console.log(`Swagger: http://localhost:${port}/docs`);
+    console.log(`Swagger: ${baseUrl}/docs`);
   } else {
-    console.log('Swagger disabled in production (set ENABLE_SWAGGER=true to enable)');
+    console.log('Swagger disabled (set ENABLE_SWAGGER=true to enable)');
   }
-  console.log(`Health:  http://localhost:${port}/api/health`);
+  console.log(`Health:  ${baseUrl}/api/health`);
 }
 bootstrap();

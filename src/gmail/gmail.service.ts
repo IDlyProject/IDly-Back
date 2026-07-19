@@ -6,6 +6,11 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { google } from 'googleapis';
+import { once } from 'events';
+import { createWriteStream } from 'fs';
+import { unlink } from 'fs/promises';
+import { tmpdir } from 'os';
+import { join } from 'path';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   decryptToken,
@@ -65,14 +70,15 @@ export class GmailService {
   }
 
   /**
-   * Gmail 전체 메일을 .mbox 형식 Buffer로 반환
+   * Gmail 전체 메일을 .mbox 형식으로 임시 파일에 스트리밍 저장 후 경로 반환
    * RFC 4155 준수: From <sender> <date>\n<raw message>\n\n
+   * 호출 측에서 tmpPath 파일을 반드시 삭제해야 함
    */
   async fetchAllEmailsAsMbox(
     gmailAccountId: string,
     userId: string,
   ): Promise<{
-    mbox: Buffer;
+    tmpPath: string;
     count: number;
     sizeBytes: number;
     lastEmailDate: Date | null;
@@ -111,6 +117,9 @@ export class GmailService {
     const auth = this.getOAuth2Client(plainRefreshToken);
     const gmail = google.gmail({ version: 'v1', auth });
 
+    const tmpPath = join(tmpdir(), `mbox-${gmailAccountId}-${Date.now()}.mbox`);
+    const writer = createWriteStream(tmpPath, { encoding: 'binary' });
+
     try {
       const messageIds: string[] = [];
       let pageToken: string | undefined;
@@ -129,7 +138,8 @@ export class GmailService {
 
       this.logger.log(`[${account.email}] 전체 메일 수: ${messageIds.length}`);
 
-      const mboxParts: string[] = [];
+      let count = 0;
+      let sizeBytes = 0;
       let lastEmailDate: Date | null = null;
       const BATCH = 10;
 
@@ -153,9 +163,11 @@ export class GmailService {
           if (!lastEmailDate || emailDate > lastEmailDate)
             lastEmailDate = emailDate;
 
-          mboxParts.push(
-            `From mboxrd@localhost ${emailDate.toUTCString()}\n${rawBytes}\n\n`,
-          );
+          const chunk = `From mboxrd@localhost ${emailDate.toUTCString()}\n${rawBytes}\n\n`;
+          const ok = writer.write(chunk, 'binary');
+          if (!ok) await once(writer, 'drain');
+          sizeBytes += Buffer.byteLength(chunk, 'binary');
+          count += 1;
         }
 
         if (i % 100 === 0) {
@@ -163,19 +175,24 @@ export class GmailService {
         }
       }
 
+      writer.end();
+      await once(writer, 'finish');
+
       await this.prisma.gmailAccount.update({
         where: { id: gmailAccountId },
         data: { lastSyncedAt: new Date(), status: 'connected' },
       });
 
-      const mbox = Buffer.from(mboxParts.join(''), 'binary');
-      return {
-        mbox,
-        count: mboxParts.length,
-        sizeBytes: mbox.byteLength,
-        lastEmailDate,
-      };
+      return { tmpPath, count, sizeBytes, lastEmailDate };
     } catch (error) {
+      writer.destroy();
+      await unlink(tmpPath).catch((cleanupError: NodeJS.ErrnoException) => {
+        if (cleanupError.code !== 'ENOENT') {
+          this.logger.warn(
+            `failed to delete temporary mbox ${tmpPath}: ${cleanupError.message}`,
+          );
+        }
+      });
       if (this.isAuthError(error)) {
         await this.markReconnectRequired(gmailAccountId);
         throw new UnauthorizedException(
