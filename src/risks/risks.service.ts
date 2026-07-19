@@ -115,26 +115,6 @@ export class RisksService {
     };
   }
 
-  async skipAccount(serviceAccountId: string, userId: string) {
-    const sa = await this.prisma.serviceAccount.findFirst({
-      where: { id: serviceAccountId, gmailAccount: { userId } },
-    });
-    if (!sa) throw new NotFoundException('서비스를 찾을 수 없습니다.');
-
-    await this.prisma.actionSession.updateMany({
-      where: { serviceAccountId, status: 'active' },
-      data: { status: 'abandoned', completedAt: new Date(), feedbackEnabled: false, composerEnabled: false, composerPlaceholder: null },
-    });
-
-    const updated = await this.prisma.serviceAccount.update({
-      where: { id: serviceAccountId },
-      data: { status: 'skipped', skippedAt: new Date() },
-    });
-
-    await this.invalidateSnapshot(userId);
-    return { serviceAccountId: updated.id, status: updated.status };
-  }
-
   async setDormant(serviceAccountId: string, userId: string) {
     const sa = await this.prisma.serviceAccount.findFirst({
       where: { id: serviceAccountId, gmailAccount: { userId } },

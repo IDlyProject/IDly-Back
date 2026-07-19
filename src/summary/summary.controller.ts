@@ -56,7 +56,7 @@ export class SummaryController {
     schema: {
       example: {
         month: '2026-07',
-        progress: { done: 3, skipped: 1, pending: 4 },
+        progress: { done: 3, pending: 4 },
         mailAccounts: [{ id: 'ga-uuid', email: 'user@gmail.com', label: 'Gmail동' }],
         services: [
           {
