@@ -11,6 +11,7 @@ import { createWriteStream } from 'fs';
 import { unlink } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
+import type { WriteStream } from 'fs';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   decryptToken,
@@ -67,6 +68,23 @@ export class GmailService {
     this.logger.warn(
       `Gmail account ${gmailAccountId} marked reconnect_required`,
     );
+  }
+
+  private intConfig(key: string, fallback: number) {
+    const value = Number(this.config.get(key));
+    return Number.isFinite(value) && value > 0 ? value : fallback;
+  }
+
+  private async writeMboxChunk(
+    writer: WriteStream,
+    chunk: string | Buffer,
+    encoding?: BufferEncoding,
+  ) {
+    const ok =
+      typeof chunk === 'string' && encoding
+        ? writer.write(chunk, encoding)
+        : writer.write(chunk);
+    if (!ok) await once(writer, 'drain');
   }
 
   /**
@@ -141,7 +159,9 @@ export class GmailService {
       let count = 0;
       let sizeBytes = 0;
       let lastEmailDate: Date | null = null;
-      const BATCH = 10;
+      const BATCH = this.intConfig('GMAIL_FETCH_BATCH_SIZE', 1);
+      const MAX_RAW_BYTES = this.intConfig('GMAIL_MAX_RAW_MESSAGE_BYTES', 5_000_000);
+      let skippedLargeMessages = 0;
 
       for (let i = 0; i < messageIds.length; i += BATCH) {
         const batch = messageIds.slice(i, i + BATCH);
@@ -156,17 +176,23 @@ export class GmailService {
           const msg = (result.value as any).data;
           if (!msg?.raw) continue;
 
-          const rawBytes = Buffer.from(msg.raw, 'base64url').toString('binary');
+          const rawBytes = Buffer.from(msg.raw, 'base64url');
+          if (rawBytes.byteLength > MAX_RAW_BYTES) {
+            skippedLargeMessages += 1;
+            continue;
+          }
+
           const emailDate = msg.internalDate
             ? new Date(parseInt(msg.internalDate))
             : new Date();
           if (!lastEmailDate || emailDate > lastEmailDate)
             lastEmailDate = emailDate;
 
-          const chunk = `From mboxrd@localhost ${emailDate.toUTCString()}\n${rawBytes}\n\n`;
-          const ok = writer.write(chunk, 'binary');
-          if (!ok) await once(writer, 'drain');
-          sizeBytes += Buffer.byteLength(chunk, 'binary');
+          const header = `From mboxrd@localhost ${emailDate.toUTCString()}\n`;
+          await this.writeMboxChunk(writer, header, 'binary');
+          await this.writeMboxChunk(writer, rawBytes);
+          await this.writeMboxChunk(writer, '\n\n', 'binary');
+          sizeBytes += Buffer.byteLength(header, 'binary') + rawBytes.byteLength + 2;
           count += 1;
         }
 
@@ -182,6 +208,12 @@ export class GmailService {
         where: { id: gmailAccountId },
         data: { lastSyncedAt: new Date(), status: 'connected' },
       });
+
+      if (skippedLargeMessages > 0) {
+        this.logger.warn(
+          `[${account.email}] ${skippedLargeMessages}개 대용량 메일은 메모리 보호를 위해 mbox에서 제외`,
+        );
+      }
 
       return { tmpPath, count, sizeBytes, lastEmailDate };
     } catch (error) {
