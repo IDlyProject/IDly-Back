@@ -21,6 +21,7 @@ import { planKbActionMerge } from '../risks/policy/action-kb';
 import {
   ANALYSIS_COOLDOWN_MS,
   ANALYSIS_ORPHAN_TTL_MS,
+  nextAnalysisAccountStatus,
 } from '../common/domain/status';
 import { SolarService } from '../common/solar/solar.service';
 import {
@@ -29,43 +30,19 @@ import {
 } from '../common/domain/metrics';
 import type { AccountStatus, RiskLevel } from '../common/domain/status';
 import { gmailAccountLogRef } from '../common/logging/redact';
-
-type AiSecurityLevel = '위험' | '주의' | '양호';
-
-interface AiProblemMail {
-  subject?: string;
-  date?: string;
-  body?: string;
-  matched_keywords?: string;
-}
-
-interface AiAccountAnalysis {
-  account_id?: string;
-  account?: string;
-  security_score?: number;
-  security_level?: AiSecurityLevel | string;
-  interpretation?: string;
-  problem_mails?: AiProblemMail[];
-}
-
-interface AiAnalyzeResponse {
-  accounts?: AiAccountAnalysis[];
-}
-
-type RiskType =
-  | 'new_device_login'
-  | 'password_reset'
-  | 'verification_code'
-  | 'account_recovery'
-  | 'permission_grant'
-  | 'security_recommendation';
-
-const FORCE_HIGH_RISK_TYPES = new Set<RiskType>([
-  'new_device_login',
-  'password_reset',
-  'verification_code',
-  'account_recovery',
-]);
+import {
+  parseAiAnalyzeResponse,
+  type AiAccountAnalysis,
+  type AiAnalyzeResponse,
+  type AiProblemMail,
+} from './ai-analyze-response';
+import {
+  inferRiskType,
+  riskLevelToAccountStatus,
+  toHeadline,
+  toRiskLevel,
+  type RiskType,
+} from './ai-risk-mapping';
 
 const STEP_MESSAGES: Record<string, string> = {
   waiting: '분석을 준비하고 있어요.',
@@ -434,11 +411,8 @@ export class AnalysisService implements OnModuleInit {
       }),
     );
 
-    // Loose shape check — reject clearly invalid AI payloads
-    if (data == null || typeof data !== 'object') {
-      throw new Error('AI response is not an object');
-    }
-    return data as AiAnalyzeResponse;
+    // 내부 스키마 검증 — 실패 시 throw → 기존 run failed 경로 (클라이언트 status 필드 동일)
+    return parseAiAnalyzeResponse(data);
   }
 
   private async saveResults(
@@ -655,48 +629,18 @@ export class AnalysisService implements OnModuleInit {
     }
   }
 
-  // ─── 분류 ──────────────────────────────────────────────────────────────────
+  // ─── 분류 (순수 로직: ai-risk-mapping / domain/status) ─────────────────────
 
   private toRiskLevel(
     level?: string,
     score?: number,
     riskType?: RiskType | null,
   ): RiskLevel {
-    const normalizedScore =
-      typeof score === 'number' && Number.isFinite(score) ? score : null;
-    const hasForceHighRisk = riskType
-      ? FORCE_HIGH_RISK_TYPES.has(riskType)
-      : false;
-
-    if (level === '위험') {
-      if (hasForceHighRisk || (normalizedScore ?? 0) >= 7) return 'high';
-      return 'medium';
-    }
-
-    if (level === '주의') {
-      if (hasForceHighRisk || (normalizedScore ?? 0) >= 8) return 'high';
-      return 'medium';
-    }
-
-    if (level === '양호') {
-      if ((normalizedScore ?? 0) >= 6 && hasForceHighRisk) return 'medium';
-      if ((normalizedScore ?? 0) >= 4) return 'low';
-      return 'safe';
-    }
-
-    if (normalizedScore === null) return hasForceHighRisk ? 'medium' : 'safe';
-    if (hasForceHighRisk && normalizedScore >= 4) return 'high';
-    if (normalizedScore >= 7) return 'high';
-    if (normalizedScore >= 4) return 'medium';
-    if (normalizedScore > 0) return 'low';
-    return 'safe';
+    return toRiskLevel(level, score, riskType);
   }
 
   private toStatus(riskLevel: RiskLevel): AccountStatus {
-    if (riskLevel === 'high' || riskLevel === 'medium')
-      return 'action_required';
-    if (riskLevel === 'low') return 'watch';
-    return 'safe';
+    return riskLevelToAccountStatus(riskLevel);
   }
 
   private nextStatus(
@@ -704,52 +648,19 @@ export class AnalysisService implements OnModuleInit {
     computedStatus: AccountStatus,
     hasNewEvidence: boolean,
   ): AccountStatus {
-    if (
-      !hasNewEvidence &&
-      (existingStatus === 'resolved' || existingStatus === 'skipped')
-    ) {
-      return existingStatus;
-    }
-    if (existingStatus === 'dormant') return 'dormant';
-    return computedStatus;
+    return nextAnalysisAccountStatus(
+      existingStatus,
+      computedStatus,
+      hasNewEvidence,
+    );
   }
 
   private toHeadline(riskLevel: RiskLevel): string {
-    if (riskLevel === 'high') return '오늘 안에 확인 필요';
-    if (riskLevel === 'medium') return '확인이 필요해요';
-    return '지켜보는 중이에요';
+    return toHeadline(riskLevel);
   }
 
   private inferRiskType(ai: AiAccountAnalysis): RiskType {
-    const haystack = [
-      ai.interpretation,
-      ...(ai.problem_mails ?? []).flatMap((m) => [
-        m.subject,
-        m.matched_keywords,
-        m.body,
-      ]),
-    ]
-      .filter(Boolean)
-      .join('\n')
-      .toLowerCase();
-
-    if (this.has(haystack, ['새 기기', '새 로그인', 'new device', 'new login']))
-      return 'new_device_login';
-    if (this.has(haystack, ['비밀번호 재설정', 'password reset', 'recover']))
-      return 'password_reset';
-    if (
-      this.has(haystack, ['인증 코드', 'verification code', 'otp', '인증번호'])
-    )
-      return 'verification_code';
-    if (this.has(haystack, ['계정 복구', 'account recovery']))
-      return 'account_recovery';
-    if (this.has(haystack, ['권한', 'permission', 'authorized app']))
-      return 'permission_grant';
-    return 'security_recommendation';
-  }
-
-  private has(text: string, keywords: string[]): boolean {
-    return keywords.some((kw) => text.includes(kw.toLowerCase()));
+    return inferRiskType(ai);
   }
 
   private buildEvidenceHash(serviceName: string, mail: AiProblemMail): string {

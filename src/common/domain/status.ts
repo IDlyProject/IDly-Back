@@ -53,3 +53,23 @@ export const ANALYSIS_ORPHAN_TTL_MS = 30 * 60 * 1000; // 30 minutes
  * startAnalysis 응답 스키마는 동일하고, 너무 잦으면 기존과 같이 429 메시지를 반환한다.
  */
 export const ANALYSIS_COOLDOWN_MS = 300_000; // 5 minutes
+
+/**
+ * 재분석 시 ServiceAccount.status 병합 규칙 (API 응답 shape 불변).
+ * - 새 근거 없으면 resolved/skipped 유지
+ * - dormant는 유지
+ */
+export function nextAnalysisAccountStatus(
+  existingStatus: AccountStatus | undefined,
+  computedStatus: AccountStatus,
+  hasNewEvidence: boolean,
+): AccountStatus {
+  if (
+    !hasNewEvidence &&
+    (existingStatus === 'resolved' || existingStatus === 'skipped')
+  ) {
+    return existingStatus;
+  }
+  if (existingStatus === 'dormant') return 'dormant';
+  return computedStatus;
+}
