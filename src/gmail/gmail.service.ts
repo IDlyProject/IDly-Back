@@ -20,6 +20,24 @@ import {
   resolveEncryptionKey,
 } from '../common/crypto/token-crypto';
 
+async function withRetry<T>(
+  fn: () => Promise<T>,
+  maxAttempts = 3,
+  baseDelayMs = 1000,
+): Promise<T> {
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await fn();
+    } catch (err: unknown) {
+      const status = (err as any)?.response?.status ?? (err as any)?.code;
+      const retryable = status === 429 || status === 500 || status === 503;
+      if (!retryable || attempt === maxAttempts) throw err;
+      await new Promise((r) => setTimeout(r, baseDelayMs * 2 ** (attempt - 1)));
+    }
+  }
+  throw new Error('unreachable');
+}
+
 @Injectable()
 export class GmailService {
   private readonly logger = new Logger(GmailService.name);
@@ -143,11 +161,9 @@ export class GmailService {
       let pageToken: string | undefined;
 
       do {
-        const res = await gmail.users.messages.list({
-          userId: 'me',
-          maxResults: 500,
-          pageToken,
-        });
+        const res = await withRetry(() =>
+          gmail.users.messages.list({ userId: 'me', maxResults: 500, pageToken }),
+        );
         for (const m of res.data.messages ?? []) {
           if (m.id) messageIds.push(m.id);
         }
@@ -167,7 +183,7 @@ export class GmailService {
         const batch = messageIds.slice(i, i + BATCH);
         const results = await Promise.allSettled(
           batch.map((id) =>
-            gmail.users.messages.get({ userId: 'me', id, format: 'raw' }),
+            withRetry(() => gmail.users.messages.get({ userId: 'me', id, format: 'raw' })),
           ),
         );
 

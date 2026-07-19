@@ -59,7 +59,7 @@ const FORCE_HIGH_RISK_TYPES = new Set<RiskType>([
   'verification_code',
   'account_recovery',
 ]);
-const ANALYSIS_COOLDOWN_MS = 60_000;
+const ANALYSIS_COOLDOWN_MS = 300_000;
 
 const STEP_MESSAGES: Record<string, string> = {
   waiting: '분석을 준비하고 있어요.',
@@ -108,7 +108,6 @@ export class AnalysisService implements OnModuleInit {
   }
 
   async startAnalysis(userId: string, mailAccountIds?: string[]) {
-    await this.recoverOrphanRuns();
 
     const accounts = await this.prisma.gmailAccount.findMany({
       where: {
