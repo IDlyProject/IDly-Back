@@ -1,31 +1,11 @@
 /**
- * Mirrors AnalysisService.nextStatus / RisksService.nextStatus rules for regression.
+ * Domain status transition regression — shared with AnalysisService.
  */
 
-import { restoreAccountStatus } from './status';
-
-type AccountStatus =
-  | 'action_required'
-  | 'watch'
-  | 'safe'
-  | 'resolved'
-  | 'skipped'
-  | 'dormant';
-
-function nextAnalysisStatus(
-  existingStatus: AccountStatus | undefined,
-  computedStatus: AccountStatus,
-  hasNewEvidence: boolean,
-): AccountStatus {
-  if (
-    !hasNewEvidence &&
-    (existingStatus === 'resolved' || existingStatus === 'skipped')
-  ) {
-    return existingStatus;
-  }
-  if (existingStatus === 'dormant') return 'dormant';
-  return computedStatus;
-}
+import {
+  nextAnalysisAccountStatus,
+  restoreAccountStatus,
+} from './status';
 
 function nextUserActionStatus(
   requestedStatus: 'resolved' | 'skipped' | 'pending',
@@ -41,20 +21,20 @@ function nextUserActionStatus(
 describe('status transitions', () => {
   it('keeps resolved when no new evidence', () => {
     expect(
-      nextAnalysisStatus('resolved', 'action_required', false),
+      nextAnalysisAccountStatus('resolved', 'action_required', false),
     ).toBe('resolved');
   });
 
   it('reopens resolved when new evidence arrives', () => {
     expect(
-      nextAnalysisStatus('resolved', 'action_required', true),
+      nextAnalysisAccountStatus('resolved', 'action_required', true),
     ).toBe('action_required');
   });
 
   it('keeps dormant regardless of computed status', () => {
-    expect(nextAnalysisStatus('dormant', 'action_required', true)).toBe(
-      'dormant',
-    );
+    expect(
+      nextAnalysisAccountStatus('dormant', 'action_required', true),
+    ).toBe('dormant');
   });
 
   it('maps pending back to risk-based status', () => {

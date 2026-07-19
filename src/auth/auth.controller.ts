@@ -4,6 +4,7 @@ import {
   Controller,
   Get,
   HttpCode,
+  Logger,
   Post,
   Query,
   Req,
@@ -39,6 +40,8 @@ class RefreshDto {
 @Controller('auth')
 @UseGuards(RateLimitGuard)
 export class AuthController {
+  private readonly logger = new Logger(AuthController.name);
+
   constructor(
     private readonly authService: AuthService,
     private readonly config: ConfigService,
@@ -169,7 +172,7 @@ export class AuthController {
         else if (msg.includes('OAuth state')) errorCode = 'invalid_oauth_state';
       }
 
-      console.error('[OAuth Callback Error]', errorCode, error instanceof Error ? error.message : error);
+      this.logger.error(`[OAuth Callback] errorCode=${errorCode} — ${error instanceof Error ? error.message : error}`);
 
       res.redirect(
         `${frontendUrl}/auth/callback?error=${encodeURIComponent(errorCode)}`,
