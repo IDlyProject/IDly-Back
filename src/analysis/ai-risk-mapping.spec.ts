@@ -16,6 +16,24 @@ describe('ai-risk-mapping', () => {
     expect(toRiskLevel('양호', 5, null)).toBe('low');
   });
 
+  it('does not let force-high security signals sink to low or safe', () => {
+    expect(toRiskLevel('양호', 6, 'verification_code')).toBe('medium');
+    expect(toRiskLevel(undefined, 4, 'account_recovery')).toBe('high');
+    expect(toRiskLevel(undefined, undefined, 'password_reset')).toBe('medium');
+  });
+
+  it('falls back to score when security level is unknown', () => {
+    expect(toRiskLevel('UNKNOWN', 8, null)).toBe('high');
+    expect(toRiskLevel('UNKNOWN', 5, null)).toBe('medium');
+    expect(toRiskLevel('UNKNOWN', 1, null)).toBe('low');
+    expect(toRiskLevel('UNKNOWN', 0, null)).toBe('safe');
+  });
+
+  it('treats AI security_score as risk signal strength, not app securityScore', () => {
+    expect(toRiskLevel('양호', 8, null)).toBe('low');
+    expect(toRiskLevel('위험', 8, null)).toBe('high');
+  });
+
   it('maps risk level to account status', () => {
     expect(riskLevelToAccountStatus('high')).toBe('action_required');
     expect(riskLevelToAccountStatus('medium')).toBe('action_required');
@@ -45,9 +63,9 @@ describe('ai-risk-mapping', () => {
     expect(
       nextAnalysisAccountStatus('resolved', 'action_required', false),
     ).toBe('resolved');
-    expect(
-      nextAnalysisAccountStatus('resolved', 'action_required', true),
-    ).toBe('action_required');
+    expect(nextAnalysisAccountStatus('resolved', 'action_required', true)).toBe(
+      'action_required',
+    );
   });
 
   it('builds stable headlines', () => {

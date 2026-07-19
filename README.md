@@ -224,6 +224,17 @@ npm run start:dev
 - Render production 실행은 `NODE_OPTIONS=--max-old-space-size=400`으로 Node old-space 상한을 명시합니다.
 - 현재 배포 구조는 단일 Render Web Service 기준입니다. 장기 확장 시 Gmail 수집/AI 분석은 queue/worker로 분리할 계획입니다.
 
+## AI 결과 가공 정책
+
+AI 분석 서버의 `/analyze` 응답은 백엔드 내부 스키마 검증을 거친 뒤 저장합니다. 이 과정은 프론트 request/response 계약을 바꾸지 않고, 잘못된 외부 응답이 홈/리포트 화면까지 전파되지 않도록 막기 위한 내부 방어 로직입니다.
+
+- AI 응답의 `security_score`는 서비스별 위험 신호 강도 점수로 해석합니다. 앱 화면의 `securityScore`는 여러 서비스 계정의 `riskLevel`을 다시 집계한 0-100 전체 보안 점수이며, 두 값은 별도 개념입니다.
+- AI 응답의 `security_level`(`위험`/`주의`/`양호`)과 `security_score`, 근거 메일에서 추론한 `primaryRiskType`을 함께 사용해 `riskLevel`(`high`/`medium`/`low`/`safe`)을 결정합니다.
+- `new_device_login`, `password_reset`, `verification_code`, `account_recovery`는 사용자가 빠르게 확인해야 하는 보안 신호이므로, 점수가 애매해도 낮은 위험도로 묻히지 않게 보수적으로 보정합니다.
+- `matched_keywords`, 제목, 날짜를 정규화해 `evidenceHash`를 만들고, 같은 서비스 계정 안에서 중복 근거가 반복 저장되지 않게 합니다.
+- AI가 준 `interpretation`과 `matched_keywords`는 근거 요약에 반영하되, 조치 URL은 LLM/AI 생성값이 아니라 백엔드 service registry/action KB에서만 조립합니다.
+- 알 수 없는 `security_level`은 실패시키지 않고 `security_score`와 보안 신호 유형 기반 fallback으로 처리합니다. 외부 AI contract가 일부 흔들려도 화면 응답 구조는 유지하기 위한 정책입니다.
+
 ## 핵심 시퀀스 (요약)
 
 ### 1) Google 로그인
