@@ -136,7 +136,7 @@ model RiskEvidence {
   subject          String?
   receivedAt       DateTime?
   summary          String?
-  evidenceHash     String?
+  evidenceHash     String
   createdAt        DateTime  @default(now())
 
   serviceAccount ServiceAccount @relation(fields: [serviceAccountId], references: [id], onDelete: Cascade)
