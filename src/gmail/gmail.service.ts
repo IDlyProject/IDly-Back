@@ -20,6 +20,7 @@ import {
   resolveEncryptionKey,
 } from '../common/crypto/token-crypto';
 import { withRetry } from '../common/http/with-retry';
+import { gmailAccountLogRef } from '../common/logging/redact';
 
 @Injectable()
 export class GmailService {
@@ -106,6 +107,7 @@ export class GmailService {
       where: { id: gmailAccountId, userId },
     });
     if (!account) throw new NotFoundException('Gmail 계정을 찾을 수 없습니다.');
+    const accountRef = gmailAccountLogRef(account);
 
     // Decrypt refresh token; lazily migrate plaintext tokens
     let plainRefreshToken: string;
@@ -145,7 +147,11 @@ export class GmailService {
 
       do {
         const res = await withRetry(() =>
-          gmail.users.messages.list({ userId: 'me', maxResults: 500, pageToken }),
+          gmail.users.messages.list({
+            userId: 'me',
+            maxResults: 500,
+            pageToken,
+          }),
         );
         for (const m of res.data.messages ?? []) {
           if (m.id) messageIds.push(m.id);
@@ -153,20 +159,25 @@ export class GmailService {
         pageToken = res.data.nextPageToken ?? undefined;
       } while (pageToken);
 
-      this.logger.log(`[${account.email}] 전체 메일 수: ${messageIds.length}`);
+      this.logger.log(`[${accountRef}] 전체 메일 수: ${messageIds.length}`);
 
       let count = 0;
       let sizeBytes = 0;
       let lastEmailDate: Date | null = null;
       const BATCH = this.intConfig('GMAIL_FETCH_BATCH_SIZE', 1);
-      const MAX_RAW_BYTES = this.intConfig('GMAIL_MAX_RAW_MESSAGE_BYTES', 5_000_000);
+      const MAX_RAW_BYTES = this.intConfig(
+        'GMAIL_MAX_RAW_MESSAGE_BYTES',
+        5_000_000,
+      );
       let skippedLargeMessages = 0;
 
       for (let i = 0; i < messageIds.length; i += BATCH) {
         const batch = messageIds.slice(i, i + BATCH);
         const results = await Promise.allSettled(
           batch.map((id) =>
-            withRetry(() => gmail.users.messages.get({ userId: 'me', id, format: 'raw' })),
+            withRetry(() =>
+              gmail.users.messages.get({ userId: 'me', id, format: 'raw' }),
+            ),
           ),
         );
 
@@ -191,7 +202,8 @@ export class GmailService {
           await this.writeMboxChunk(writer, header, 'binary');
           await this.writeMboxChunk(writer, rawBytes);
           await this.writeMboxChunk(writer, '\n\n', 'binary');
-          sizeBytes += Buffer.byteLength(header, 'binary') + rawBytes.byteLength + 2;
+          sizeBytes +=
+            Buffer.byteLength(header, 'binary') + rawBytes.byteLength + 2;
           count += 1;
         }
 
@@ -210,7 +222,7 @@ export class GmailService {
 
       if (skippedLargeMessages > 0) {
         this.logger.warn(
-          `[${account.email}] ${skippedLargeMessages}개 대용량 메일은 메모리 보호를 위해 mbox에서 제외`,
+          `[${accountRef}] ${skippedLargeMessages}개 대용량 메일은 메모리 보호를 위해 mbox에서 제외`,
         );
       }
 
