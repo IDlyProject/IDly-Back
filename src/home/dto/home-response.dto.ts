@@ -116,7 +116,7 @@ class CardNewsDto {
   @ApiProperty({ example: '불 꺼진 창문, 그냥 두면 위험한 이유' })
   title: string;
 
-  @ApiProperty({ example: 'https://idly.kr/news/1' })
+  @ApiProperty({ example: 'https://www.instagram.com/idly__apt/' })
   url: string;
 }
 
