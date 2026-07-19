@@ -31,7 +31,9 @@ import {
 import type { AccountStatus, RiskLevel } from '../common/domain/status';
 import { gmailAccountLogRef } from '../common/logging/redact';
 import {
+  isEmptyAiAnalyzeResult,
   parseAiAnalyzeResponse,
+  sanitizeAiInterpretation,
   type AiAccountAnalysis,
   type AiAnalyzeResponse,
   type AiProblemMail,
@@ -239,6 +241,19 @@ export class AnalysisService implements OnModuleInit {
         } finally {
           if (tmpPath) unlink(tmpPath, () => {});
           tmpPath = null;
+        }
+
+        // HTTP/파싱 성공이어도 accounts 가 비면 홈 카드가 안 생김 — 관측 + partial 기록
+        // (run status shape 동일: completed 가능, failedReason에 partial_errors)
+        if (isEmptyAiAnalyzeResult(aiResult)) {
+          this.logger.warn(
+            `[${accountRef}] AI 응답 accounts 비어 있음 — SA 갱신 없음`,
+          );
+          partialErrors.push(`${account.id}: ai_empty_accounts`);
+        } else {
+          this.logger.log(
+            `[${accountRef}] AI accounts=${aiResult.accounts?.length ?? 0}`,
+          );
         }
 
         await this.updateStep(runId, 'preparing_home', 70);
@@ -508,8 +523,8 @@ export class AnalysisService implements OnModuleInit {
           status,
           primaryRiskType,
           headline: riskLevel !== 'safe' ? this.toHeadline(riskLevel) : null,
-          summary: ai.interpretation ?? null,
-          interpretation: ai.interpretation ?? null,
+          summary: sanitizeAiInterpretation(ai.interpretation) ?? null,
+          interpretation: sanitizeAiInterpretation(ai.interpretation) ?? null,
           skippedAt:
             status === 'skipped' ? (existing?.skippedAt ?? null) : null,
           resolvedAt:
@@ -525,8 +540,8 @@ export class AnalysisService implements OnModuleInit {
           status,
           primaryRiskType,
           headline: riskLevel !== 'safe' ? this.toHeadline(riskLevel) : null,
-          summary: ai.interpretation ?? null,
-          interpretation: ai.interpretation ?? null,
+          summary: sanitizeAiInterpretation(ai.interpretation) ?? null,
+          interpretation: sanitizeAiInterpretation(ai.interpretation) ?? null,
           skippedAt:
             status === 'skipped'
               ? (existing?.skippedAt ?? null)
