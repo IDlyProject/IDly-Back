@@ -126,6 +126,7 @@ export class UsersService {
               lastEmailReceivedAt: true,
               createdAt: true,
               serviceAccounts: {
+                where: { status: { not: 'skipped' } },
                 select: {
                   id: true,
                   serviceName: true,
@@ -226,6 +227,7 @@ export class UsersService {
         lastEmailReceivedAt: true,
         createdAt: true,
         serviceAccounts: {
+          where: { status: { not: 'skipped' } },
           select: {
             id: true,
             serviceName: true,
