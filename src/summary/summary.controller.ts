@@ -12,7 +12,7 @@ export class SummaryController {
 
   @Get()
   @ApiOperation({
-    summary: '이번 달 보안 조치 현황 — 완료/건너뜀/대기 집계 + 서비스별 체크리스트',
+    summary: '이번 달 보안 조치 현황 — 완료/대기 집계 + 서비스별 체크리스트',
     description: `ActionItem 기준 이번 달 보안 조치 트래커를 반환합니다.
 
 ---
@@ -21,14 +21,15 @@ export class SummaryController {
 
 **progress 버킷**
 \`\`\`
-{ done, skipped, pending }
+{ done, pending }
 \`\`\`
-- ActionItem status는 \`pending | done | skipped\` 3종. \`in_progress\` 없음
-- UI 「진행중」 칸: \`skipped\`를 매핑하거나 0/숨김 처리 필요
-- UI 「완료」 → done, 「건너뜀」 → skipped, 「대기」 → pending 권장
+- UI 「완료」 → \`done\`
+- UI 「대기」 → \`pending\`
+- 현재 디자인에서 조치 건너뛰기 기능이 제거되어 \`skipped\`는 응답/집계에서 제외됩니다.
+- 기존 DB에 남아 있는 과거 \`skipped\` actionItem도 정리 화면에는 노출하지 않습니다.
 
 **월 필터 정책**
-- \`done\` / \`skipped\`: 이번 달 \`updatedAt\` 기준으로 집계
+- \`done\`: 이번 달 \`updatedAt\` 기준으로 집계
 - \`pending\`: 월 무관 항상 포함 — 지난달 미완 백로그도 표시됨 (의도적)
 
 **mailAccounts[] — 계정 필터 드롭다운**
@@ -44,10 +45,10 @@ export class SummaryController {
 
 **포함 항목**
 - \`month\`: 조회 기준 연월 (YYYY-MM)
-- \`progress\`: { done, skipped, pending } — 이번 달 조치 집계
+- \`progress\`: { done, pending } — 이번 달 조치 집계
 - \`mailAccounts[]\`: { id, email, label } — Gmail 계정 필터용
 - \`services[]\`: 조치 항목이 있는 서비스 목록. 각 서비스에 \`sourceMailAccount\`·\`actions[]\` 포함
-  - \`actions[].status\`: pending | done | skipped
+  - \`actions[].status\`: pending | done
   - \`actions[].updatedAt\`: ISO 8601`,
   })
   @ApiResponse({
@@ -56,7 +57,7 @@ export class SummaryController {
     schema: {
       example: {
         month: '2026-07',
-        progress: { done: 3, skipped: 1, pending: 4 },
+        progress: { done: 3, pending: 4 },
         mailAccounts: [{ id: 'ga-uuid', email: 'user@gmail.com', label: 'Gmail동' }],
         services: [
           {

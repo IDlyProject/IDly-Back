@@ -192,18 +192,6 @@ export class RisksController {
     return this.risksService.getServiceDetail(id, req.user.sub);
   }
 
-  // ── 건너뛰기 ──────────────────────────────────────────────────────────────────
-
-  @Patch(':serviceAccountId/skip')
-  @HttpCode(200)
-  @ApiTags('2-3. 계정 상세 · 보안 조치')
-  @ApiOperation({ summary: '조치 건너뛰기 — skipped 처리' })
-  @ApiParam({ name: 'serviceAccountId' })
-  @ApiResponse({ status: 200, schema: { example: { serviceAccountId: 'uuid', status: 'skipped' } } })
-  skipAccount(@Req() req, @Param('serviceAccountId') id: string) {
-    return this.risksService.skipAccount(id, req.user.sub);
-  }
-
   // ── 숨기기 / 복원 ─────────────────────────────────────────────────────────────
 
   @Patch(':serviceAccountId/dormant')

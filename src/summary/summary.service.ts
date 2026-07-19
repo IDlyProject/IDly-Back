@@ -25,6 +25,7 @@ export class SummaryService {
             gmailAccountId: true,
             actionItems: {
               where: {
+                NOT: { status: 'skipped' },
                 OR: [
                   { status: 'pending' },
                   { updatedAt: { gte: monthStart } },
@@ -56,11 +57,10 @@ export class SummaryService {
         return pendingB - pendingA;
       });
 
-    const progress = { done: 0, skipped: 0, pending: 0 };
+    const progress = { done: 0, pending: 0 };
     for (const sa of services) {
       for (const a of sa.actionItems) {
         if (a.status === 'done') progress.done++;
-        else if (a.status === 'skipped') progress.skipped++;
         else progress.pending++;
       }
     }
