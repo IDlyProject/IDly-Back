@@ -168,6 +168,8 @@ export class AuthController {
         else if (msg.includes('OAuth state')) errorCode = 'invalid_oauth_state';
       }
 
+      console.error('[OAuth Callback Error]', errorCode, error instanceof Error ? error.message : error);
+
       res.redirect(
         `${frontendUrl}/auth/callback?error=${encodeURIComponent(errorCode)}`,
       );
