@@ -12,6 +12,7 @@ import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
 import FormData from 'form-data';
 import { createHash } from 'crypto';
+import { createReadStream, unlink } from 'fs';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { GmailService } from '../gmail/gmail.service';
@@ -217,13 +218,13 @@ export class AnalysisService implements OnModuleInit {
         this.logger.log(`[${account.email}] mbox 수집 시작`);
 
         gmailAttempts += 1;
-        let mbox: Buffer;
+        let tmpPath: string | null = null;
         let count: number;
         let sizeBytes: number;
         let lastEmailDate: Date | null;
 
         try {
-          ({ mbox, count, sizeBytes, lastEmailDate } =
+          ({ tmpPath, count, sizeBytes, lastEmailDate } =
             await this.gmailService.fetchAllEmailsAsMbox(account.id, userId));
           gmailSuccesses += 1;
         } catch (e) {
@@ -235,6 +236,7 @@ export class AnalysisService implements OnModuleInit {
 
         if (count === 0) {
           this.logger.warn(`[${account.email}] 메일 없음, 건너뜀`);
+          if (tmpPath) unlink(tmpPath, () => {});
           continue;
         }
 
@@ -245,13 +247,16 @@ export class AnalysisService implements OnModuleInit {
         aiAttempts += 1;
         let aiResult: AiAnalyzeResponse = { accounts: [] };
         try {
-          aiResult = await this.uploadMboxToAI(mbox);
+          aiResult = await this.uploadMboxToAI(tmpPath!);
           aiSuccesses += 1;
         } catch (e) {
           const msg = this.safeErrorMessage(e);
           this.logger.error(`[${account.email}] AI 분석 실패: ${msg}`);
           partialErrors.push(`${account.email}: ai_analyze_failed`);
           continue;
+        } finally {
+          if (tmpPath) unlink(tmpPath, () => {});
+          tmpPath = null;
         }
 
         await this.updateStep(runId, 'preparing_home', 70);
@@ -396,10 +401,10 @@ export class AnalysisService implements OnModuleInit {
     });
   }
 
-  private async uploadMboxToAI(mbox: Buffer): Promise<AiAnalyzeResponse> {
+  private async uploadMboxToAI(tmpPath: string): Promise<AiAnalyzeResponse> {
     const aiUrl = this.config.get('AI_SERVER_URL', 'http://localhost:8000');
     const form = new FormData();
-    form.append('file', mbox, {
+    form.append('file', createReadStream(tmpPath), {
       filename: 'analysis.mbox',
       contentType: 'application/mbox',
     });
