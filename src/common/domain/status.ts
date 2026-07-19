@@ -47,3 +47,9 @@ export type GmailAccountStatus = (typeof GMAIL_ACCOUNT_STATUSES)[number];
 
 /** Stale analysis runs older than this are marked failed on recovery. */
 export const ANALYSIS_ORPHAN_TTL_MS = 30 * 60 * 1000; // 30 minutes
+
+/**
+ * 동일 유저 연속 분석 시작 최소 간격.
+ * startAnalysis 응답 스키마는 동일하고, 너무 잦으면 기존과 같이 429 메시지를 반환한다.
+ */
+export const ANALYSIS_COOLDOWN_MS = 300_000; // 5 minutes

@@ -18,7 +18,10 @@ import { PrismaService } from '../prisma/prisma.service';
 import { GmailService } from '../gmail/gmail.service';
 import { resolveService } from '../common/registry/service-registry';
 import { planKbActionMerge } from '../risks/policy/action-kb';
-import { ANALYSIS_ORPHAN_TTL_MS } from '../common/domain/status';
+import {
+  ANALYSIS_COOLDOWN_MS,
+  ANALYSIS_ORPHAN_TTL_MS,
+} from '../common/domain/status';
 import { SolarService } from '../common/solar/solar.service';
 import { computeSecurityScore, isActiveForHomeMetrics } from '../common/domain/metrics';
 import type { AccountStatus, RiskLevel } from '../common/domain/status';
@@ -59,7 +62,6 @@ const FORCE_HIGH_RISK_TYPES = new Set<RiskType>([
   'verification_code',
   'account_recovery',
 ]);
-const ANALYSIS_COOLDOWN_MS = 300_000;
 
 const STEP_MESSAGES: Record<string, string> = {
   waiting: '분석을 준비하고 있어요.',
@@ -108,7 +110,6 @@ export class AnalysisService implements OnModuleInit {
   }
 
   async startAnalysis(userId: string, mailAccountIds?: string[]) {
-
     const accounts = await this.prisma.gmailAccount.findMany({
       where: {
         userId,

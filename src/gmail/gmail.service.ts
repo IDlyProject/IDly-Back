@@ -19,24 +19,7 @@ import {
   isEncrypted,
   resolveEncryptionKey,
 } from '../common/crypto/token-crypto';
-
-async function withRetry<T>(
-  fn: () => Promise<T>,
-  maxAttempts = 3,
-  baseDelayMs = 1000,
-): Promise<T> {
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    try {
-      return await fn();
-    } catch (err: unknown) {
-      const status = (err as any)?.response?.status ?? (err as any)?.code;
-      const retryable = status === 429 || status === 500 || status === 503;
-      if (!retryable || attempt === maxAttempts) throw err;
-      await new Promise((r) => setTimeout(r, baseDelayMs * 2 ** (attempt - 1)));
-    }
-  }
-  throw new Error('unreachable');
-}
+import { withRetry } from '../common/http/with-retry';
 
 @Injectable()
 export class GmailService {

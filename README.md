@@ -9,15 +9,15 @@ Gmail 보안 신호 분석 서비스 **IDly**의 백엔드 API 서버입니다. 
 | 개발 환경 정보 | [개발 환경](#개발-환경) |
 | 개발 스택 정보 | [개발 스택](#개발-스택) |
 | ERD | [docs/erd.md](./docs/erd.md) |
-| API 명세 | [배포 Swagger](https://idly-back.onrender.com/docs) |
+| API 명세 | Swagger / OpenAPI (로컬 또는 `ENABLE_SWAGGER=true`) |
 
 ## 배포 정보
 
 | 항목 | 값 |
 | --- | --- |
 | API Base URL | `https://idly-back.onrender.com/api` |
-| Swagger | `https://idly-back.onrender.com/docs` |
 | Health Check | `https://idly-back.onrender.com/api/health` |
+| Swagger | production 기본 **비활성** (`NODE_ENV=production` 이고 `ENABLE_SWAGGER` 미설정 시 `/docs` 미노출). 로컬·스테이징 또는 `ENABLE_SWAGGER=true` 일 때 `/docs` |
 | 배포 플랫폼 | Render Web Service |
 | 배포 브랜치 | `main` |
 
@@ -152,10 +152,11 @@ NestJS API
 
 ## API 명세
 
-API 명세는 배포 Swagger에서 확인합니다.
+- 로컬: `npm run start:dev` 후 `http://localhost:3000/docs`
+- OpenAPI JSON: `http://localhost:3000/docs-json` (Swagger 활성 시)
+- production: 보안상 `/docs` 기본 비활성. 필요 시 환경변수 `ENABLE_SWAGGER=true`
 
-- Swagger: `https://idly-back.onrender.com/docs`
-- OpenAPI JSON: `https://idly-back.onrender.com/docs-json`
+**프론트 계약 원칙:** request/response 필드·예시는 FE 연동 기준으로 유지하고, Swagger description 문구만 보강합니다.
 
 주요 태그:
 
