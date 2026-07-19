@@ -6,7 +6,9 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { google } from 'googleapis';
+import { once } from 'events';
 import { createWriteStream } from 'fs';
+import { unlink } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { PrismaService } from '../prisma/prisma.service';
@@ -163,7 +165,7 @@ export class GmailService {
 
           const chunk = `From mboxrd@localhost ${emailDate.toUTCString()}\n${rawBytes}\n\n`;
           const ok = writer.write(chunk, 'binary');
-          if (!ok) await new Promise<void>((r) => writer.once('drain', r));
+          if (!ok) await once(writer, 'drain');
           sizeBytes += Buffer.byteLength(chunk, 'binary');
           count += 1;
         }
@@ -173,9 +175,8 @@ export class GmailService {
         }
       }
 
-      await new Promise<void>((resolve, reject) => {
-        writer.end((err?: Error | null) => (err ? reject(err) : resolve()));
-      });
+      writer.end();
+      await once(writer, 'finish');
 
       await this.prisma.gmailAccount.update({
         where: { id: gmailAccountId },
@@ -185,6 +186,13 @@ export class GmailService {
       return { tmpPath, count, sizeBytes, lastEmailDate };
     } catch (error) {
       writer.destroy();
+      await unlink(tmpPath).catch((cleanupError: NodeJS.ErrnoException) => {
+        if (cleanupError.code !== 'ENOENT') {
+          this.logger.warn(
+            `failed to delete temporary mbox ${tmpPath}: ${cleanupError.message}`,
+          );
+        }
+      });
       if (this.isAuthError(error)) {
         await this.markReconnectRequired(gmailAccountId);
         throw new UnauthorizedException(
