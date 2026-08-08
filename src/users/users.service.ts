@@ -248,11 +248,36 @@ export class UsersService {
 
   async updateProfile(
     userId: string,
-    dto: { name?: string; phone?: string; ageGroup?: string },
+    dto: {
+      name?: string;
+      phone?: string;
+      ageGroup?: string;
+      requiredTermsAgreed?: true;
+      notificationAgreed?: boolean;
+      marketingAgreed?: boolean;
+    },
   ) {
     if (dto.name != null) assertSafeDisplayText(dto.name, '이름');
     if (dto.phone != null) assertSafeDisplayText(dto.phone, '전화번호');
-    return this.prisma.user.update({ where: { id: userId }, data: dto });
+
+    const { requiredTermsAgreed, notificationAgreed, marketingAgreed, ...profileFields } = dto;
+
+    const consentData: Record<string, unknown> = {};
+    if (requiredTermsAgreed) {
+      const user = await this.prisma.user.findUniqueOrThrow({
+        where: { id: userId },
+        select: { requiredTermsAgreedAt: true },
+      });
+      consentData.requiredTermsAgreed = true;
+      consentData.requiredTermsAgreedAt = user.requiredTermsAgreedAt ?? new Date();
+    }
+    if (notificationAgreed !== undefined) consentData.notificationAgreed = notificationAgreed;
+    if (marketingAgreed !== undefined) consentData.marketingAgreed = marketingAgreed;
+
+    return this.prisma.user.update({
+      where: { id: userId },
+      data: { ...profileFields, ...consentData },
+    });
   }
 
   async getDormantAccounts(userId: string) {
