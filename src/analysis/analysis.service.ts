@@ -235,7 +235,12 @@ export class AnalysisService implements OnModuleInit {
           `[${accountRef}] ${count}개, ${sizeBytes} bytes → AI 전송`,
         );
 
-        await this.updateStep(runId, 'finding_security', 35);
+        await this.updateStep(
+          runId,
+          'finding_security',
+          35,
+          `보안 관련 메일을 찾고 있어요. (${count.toLocaleString('ko-KR')}건 검토 중)`,
+        );
 
         aiAttempts += 1;
         let aiResult: AiAnalyzeResponse = { accounts: [] };
@@ -265,7 +270,15 @@ export class AnalysisService implements OnModuleInit {
           );
         }
 
-        await this.updateStep(runId, 'grouping_accounts', 55);
+        const accountCount = aiResult.accounts?.length ?? 0;
+        await this.updateStep(
+          runId,
+          'grouping_accounts',
+          55,
+          accountCount > 0
+            ? `계정별로 묶고 있어요. (${accountCount}개 계정 확인)`
+            : undefined,
+        );
         await this.saveResults(account.id, runId, aiResult, lastEmailDate);
       }
 
@@ -411,14 +424,14 @@ export class AnalysisService implements OnModuleInit {
     });
   }
 
-  private async updateStep(runId: string, step: string, progress: number) {
+  private async updateStep(runId: string, step: string, progress: number, message?: string) {
     await this.prisma.analysisRun.update({
       where: { id: runId },
       data: {
         status: 'scanning',
         currentStep: step,
         progress,
-        displayMessage: STEP_MESSAGES[step],
+        displayMessage: message ?? STEP_MESSAGES[step],
       },
     });
   }
