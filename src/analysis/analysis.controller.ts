@@ -86,28 +86,29 @@ export class AnalysisController {
   @ApiTags('2-1. 홈 화면')
   @ApiOperation({
     summary: '분석 상태 폴링 — completed 수신 시 홈으로 이동',
-    description: `분석 진행 상태를 반환합니다. 프론트에서 주기적으로 폴링하세요.
+    description: `분석 진행 상태를 반환합니다. 주기적으로 폴링하세요.
 
 **status 값**
-- \`queued\`: 대기 중
-- \`scanning\`: 분석 중
-- \`completed\`: 완료 → 홈 화면으로 이동
-- \`failed\`: 실패
+- \`queued\` / \`scanning\`: 로딩 화면 유지
+- \`completed\`: 홈 화면으로 이동
+- \`failed\`: 에러 표시 + 재시도 유도
 
-**화면 처리 기준**
-- \`queued\` / \`scanning\`: \`progress\`, \`currentStep\`, \`displayMessage\`로 로딩 화면 표시
-- \`completed\`: \`GET /api/home\` 호출 후 홈 화면 렌더링
-- \`failed\`: \`errorMessage\` 또는 \`displayMessage\`를 보여주고 재시도 유도
+**로딩 화면 단계 목록 렌더링**
 
-**currentStep 값**
-- \`waiting\`: 분석 준비
-- \`fetching_mails\`: 메일 불러오는 중
-- \`finding_security\`: 보안 관련 메일 탐색 중 (AI 분석)
-- \`grouping_accounts\`: 계정별 묶기 및 결과 저장 중
-- \`assessing_risks\`: 위험도 판단 중
-- \`preparing_actions\`: 조치 항목 정리 중
-- \`completed\`: 완료
-- \`failed\`: 실패`,
+\`currentStep\`을 아래 순서 배열과 비교해 각 단계의 상태를 결정하세요.
+- 이전 단계: 완료
+- 현재 단계: 진행 중 (\`displayMessage\` 표시)
+- 이후 단계: 대기
+
+\`\`\`js
+const STEPS = [
+  'fetching_mails',
+  'finding_security',
+  'grouping_accounts',
+  'assessing_risks',
+  'preparing_actions',
+]
+\`\`\``,
   })
   @ApiParam({ name: 'analysisId', description: 'start 응답의 analysisId' })
   @ApiResponse({
