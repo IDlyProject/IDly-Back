@@ -101,9 +101,11 @@ export class AnalysisController {
 
 **currentStep 값**
 - \`waiting\`: 분석 준비
-- \`checking_connected_mail\`: 연결 Gmail 확인
-- \`collecting_account_signals\`: 계정 보안 신호 수집
-- \`preparing_home\`: 홈 화면 데이터 저장/집계 준비
+- \`fetching_mails\`: 메일 불러오는 중
+- \`finding_security\`: 보안 관련 메일 탐색 중 (AI 분석)
+- \`grouping_accounts\`: 계정별 묶기 및 결과 저장 중
+- \`assessing_risks\`: 위험도 판단 중
+- \`preparing_actions\`: 조치 항목 정리 중
 - \`completed\`: 완료
 - \`failed\`: 실패`,
   })
