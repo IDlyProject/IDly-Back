@@ -201,11 +201,19 @@ export class AnalysisService implements OnModuleInit {
     let aiSuccesses = 0;
     const partialErrors: string[] = [];
 
-    try {
-      await this.updateStep(runId, 'fetching_mails', 10);
+    // 계정당 progress 구간: 10%~72% 를 N등분 (각 계정당 3 sub-step)
+    const totalAccounts = accounts.length;
+    const progressSlice = totalAccounts > 0 ? Math.floor(62 / totalAccounts) : 62;
 
-      for (const account of accounts) {
+    const accountProgress = (i: number, sub: 0 | 1 | 2) =>
+      10 + i * progressSlice + Math.floor((sub / 3) * progressSlice);
+
+    try {
+      for (let i = 0; i < accounts.length; i++) {
+        const account = accounts[i];
         const accountRef = gmailAccountLogRef(account);
+
+        await this.updateStep(runId, 'fetching_mails', accountProgress(i, 0));
         this.logger.log(`[${accountRef}] mbox 수집 시작`);
 
         gmailAttempts += 1;
@@ -238,7 +246,7 @@ export class AnalysisService implements OnModuleInit {
         await this.updateStep(
           runId,
           'finding_security',
-          35,
+          accountProgress(i, 1),
           `보안 관련 메일을 찾고 있어요. (${count.toLocaleString('ko-KR')}건 검토 중)`,
         );
 
@@ -274,7 +282,7 @@ export class AnalysisService implements OnModuleInit {
         await this.updateStep(
           runId,
           'grouping_accounts',
-          55,
+          accountProgress(i, 2),
           accountCount > 0
             ? `계정별로 묶고 있어요. (${accountCount}개 계정 확인)`
             : undefined,
