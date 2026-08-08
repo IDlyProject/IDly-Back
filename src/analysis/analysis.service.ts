@@ -269,9 +269,6 @@ export class AnalysisService implements OnModuleInit {
         await this.saveResults(account.id, runId, aiResult, lastEmailDate);
       }
 
-      await this.updateStep(runId, 'assessing_risks', 75);
-      await this.updateStep(runId, 'preparing_actions', 90);
-
       // Fail the run if every Gmail or AI attempt failed (no usable results)
       if (gmailAttempts > 0 && gmailSuccesses === 0) {
         await this.markFailed(
@@ -285,6 +282,9 @@ export class AnalysisService implements OnModuleInit {
         await this.markFailed(runId, 'AI 분석 서버 호출에 모두 실패했습니다.');
         return;
       }
+
+      await this.updateStep(runId, 'assessing_risks', 75);
+      await this.updateStep(runId, 'preparing_actions', 90);
 
       await this.prisma.analysisRun.update({
         where: { id: runId },
