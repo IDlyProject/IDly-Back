@@ -88,17 +88,16 @@ export class AnalysisController {
     summary: '분석 상태 폴링 — completed 수신 시 홈으로 이동',
     description: `분석 진행 상태를 반환합니다. 주기적으로 폴링하세요.
 
-**status 값**
+**status 처리**
 - \`queued\` / \`scanning\`: 로딩 화면 유지
 - \`completed\`: 홈 화면으로 이동
-- \`failed\`: 에러 표시 + 재시도 유도
+- \`failed\`: \`errorMessage\` 표시 + 재시도 유도
+
+---
 
 **로딩 화면 단계 목록 렌더링**
 
-\`currentStep\`을 아래 순서 배열과 비교해 각 단계의 상태를 결정하세요.
-- 이전 단계: 완료
-- 현재 단계: 진행 중 (\`displayMessage\` 표시)
-- 이후 단계: 대기
+아래 순서 배열을 기준으로 \`currentStep\`과 비교해 각 항목의 상태를 결정하세요.
 
 \`\`\`js
 const STEPS = [
@@ -108,7 +107,24 @@ const STEPS = [
   'assessing_risks',
   'preparing_actions',
 ]
-\`\`\``,
+
+// STEPS 내 currentStep의 인덱스 기준:
+// - 이전 항목 → 완료
+// - 현재 항목 → 진행 중 (displayMessage 표시)
+// - 이후 항목 → 대기
+// - currentStep이 'waiting' / 'completed' / 'failed' 이면 → 목록 전체 대기 / 전체 완료 / 실패 처리
+\`\`\`
+
+**displayMessage**
+- 현재 단계의 사용자 표시 문구입니다. 그대로 렌더링하세요.
+- 일부 단계는 실시간 수치를 포함합니다.
+  - \`finding_security\`: "보안 관련 메일을 찾고 있어요. (1,240건 검토 중)"
+  - \`grouping_accounts\`: "계정별로 묶고 있어요. (8개 계정 확인)"
+
+**progress**
+- 0~100 정수, 절대 역행하지 않습니다.
+- 계정별 구간(10%~72%)과 후처리 구간(75%, 90%, 100%)으로 구성됩니다.
+- 프로그레스 바 너비에 그대로 사용하세요.`,
   })
   @ApiParam({ name: 'analysisId', description: 'start 응답의 analysisId' })
   @ApiResponse({
