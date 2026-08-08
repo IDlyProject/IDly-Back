@@ -86,26 +86,45 @@ export class AnalysisController {
   @ApiTags('2-1. 홈 화면')
   @ApiOperation({
     summary: '분석 상태 폴링 — completed 수신 시 홈으로 이동',
-    description: `분석 진행 상태를 반환합니다. 프론트에서 주기적으로 폴링하세요.
+    description: `분석 진행 상태를 반환합니다. 주기적으로 폴링하세요.
 
-**status 값**
-- \`queued\`: 대기 중
-- \`scanning\`: 분석 중
-- \`completed\`: 완료 → 홈 화면으로 이동
-- \`failed\`: 실패
+**status 처리**
+- \`queued\` / \`scanning\`: 로딩 화면 유지
+- \`completed\`: 홈 화면으로 이동
+- \`failed\`: \`errorMessage\` 표시 + 재시도 유도
 
-**화면 처리 기준**
-- \`queued\` / \`scanning\`: \`progress\`, \`currentStep\`, \`displayMessage\`로 로딩 화면 표시
-- \`completed\`: \`GET /api/home\` 호출 후 홈 화면 렌더링
-- \`failed\`: \`errorMessage\` 또는 \`displayMessage\`를 보여주고 재시도 유도
+---
 
-**currentStep 값**
-- \`waiting\`: 분석 준비
-- \`checking_connected_mail\`: 연결 Gmail 확인
-- \`collecting_account_signals\`: 계정 보안 신호 수집
-- \`preparing_home\`: 홈 화면 데이터 저장/집계 준비
-- \`completed\`: 완료
-- \`failed\`: 실패`,
+**로딩 화면 단계 목록 렌더링**
+
+아래 순서 배열을 기준으로 \`currentStep\`과 비교해 각 항목의 상태를 결정하세요.
+
+\`\`\`js
+const STEPS = [
+  'fetching_mails',
+  'finding_security',
+  'grouping_accounts',
+  'assessing_risks',
+  'preparing_actions',
+]
+
+// STEPS 내 currentStep의 인덱스 기준:
+// - 이전 항목 → 완료
+// - 현재 항목 → 진행 중 (displayMessage 표시)
+// - 이후 항목 → 대기
+// - currentStep이 'waiting' / 'completed' / 'failed' 이면 → 목록 전체 대기 / 전체 완료 / 실패 처리
+\`\`\`
+
+**displayMessage**
+- 현재 단계의 사용자 표시 문구입니다. 그대로 렌더링하세요.
+- 일부 단계는 실시간 수치를 포함합니다.
+  - \`finding_security\`: "보안 관련 메일을 찾고 있어요. (1,240건 검토 중)"
+  - \`grouping_accounts\`: "계정별로 묶고 있어요. (8개 계정 확인)"
+
+**progress**
+- 0~100 정수, 절대 역행하지 않습니다.
+- 계정별 구간(10%~72%)과 후처리 구간(75%, 90%, 100%)으로 구성됩니다.
+- 프로그레스 바 너비에 그대로 사용하세요.`,
   })
   @ApiParam({ name: 'analysisId', description: 'start 응답의 analysisId' })
   @ApiResponse({

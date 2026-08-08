@@ -1,5 +1,7 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import {
+  Equals,
+  IsBoolean,
   IsIn,
   IsOptional,
   IsString,
@@ -35,4 +37,30 @@ export class UpdateProfileDto {
   @IsIn(['10대', '20대', '30대', '40대', '50대 이상'])
   @IsOptional()
   ageGroup?: string;
+
+  @ApiPropertyOptional({
+    example: true,
+    description:
+      '필수 약관 2종 통합 동의 (서비스 이용약관·개인정보 처리방침) — 온보딩 시 제공, 반드시 true',
+  })
+  @IsBoolean()
+  @Equals(true)
+  @IsOptional()
+  requiredTermsAgreed?: true;
+
+  @ApiPropertyOptional({
+    example: true,
+    description: '실시간 보안 알림 수신 동의 (선택) — 생략 시 기존 값 유지',
+  })
+  @IsBoolean()
+  @IsOptional()
+  notificationAgreed?: boolean;
+
+  @ApiPropertyOptional({
+    example: false,
+    description: '마케팅 정보 수신 동의 (선택) — 생략 시 기존 값 유지',
+  })
+  @IsBoolean()
+  @IsOptional()
+  marketingAgreed?: boolean;
 }

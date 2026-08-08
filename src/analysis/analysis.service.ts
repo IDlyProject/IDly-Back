@@ -49,9 +49,11 @@ import {
 
 const STEP_MESSAGES: Record<string, string> = {
   waiting: '분석을 준비하고 있어요.',
-  checking_connected_mail: '연결된 Gmail을 확인하고 있어요.',
-  collecting_account_signals: '계정 보안 신호를 수집하고 있어요.',
-  preparing_home: '홈 화면을 준비하고 있어요.',
+  fetching_mails: '메일을 불러오고 있어요.',
+  finding_security: '보안 관련 메일을 찾고 있어요.',
+  grouping_accounts: '계정별로 묶고 있어요.',
+  assessing_risks: '위험도를 판단하고 있어요.',
+  preparing_actions: '필요한 조치를 정리하고 있어요.',
   completed: '메일 원문은 저장하지 않고 분석 결과만 정리했어요.',
   failed: '분석을 완료하지 못했어요. 잠시 후 다시 시도해 주세요.',
 };
@@ -199,12 +201,19 @@ export class AnalysisService implements OnModuleInit {
     let aiSuccesses = 0;
     const partialErrors: string[] = [];
 
-    try {
-      await this.updateStep(runId, 'checking_connected_mail', 10);
+    // 계정당 progress 구간: 10%~72% 를 N등분 (각 계정당 3 sub-step)
+    const totalAccounts = accounts.length;
+    const progressSlice = totalAccounts > 0 ? Math.floor(62 / totalAccounts) : 62;
 
-      for (const account of accounts) {
-        await this.updateStep(runId, 'collecting_account_signals', 30);
+    const accountProgress = (i: number, sub: 0 | 1 | 2) =>
+      10 + i * progressSlice + Math.floor((sub / 3) * progressSlice);
+
+    try {
+      for (let i = 0; i < accounts.length; i++) {
+        const account = accounts[i];
         const accountRef = gmailAccountLogRef(account);
+
+        await this.updateStep(runId, 'fetching_mails', accountProgress(i, 0));
         this.logger.log(`[${accountRef}] mbox 수집 시작`);
 
         gmailAttempts += 1;
@@ -232,6 +241,13 @@ export class AnalysisService implements OnModuleInit {
 
         this.logger.log(
           `[${accountRef}] ${count}개, ${sizeBytes} bytes → AI 전송`,
+        );
+
+        await this.updateStep(
+          runId,
+          'finding_security',
+          accountProgress(i, 1),
+          `보안 관련 메일을 찾고 있어요. (${count.toLocaleString('ko-KR')}건 검토 중)`,
         );
 
         aiAttempts += 1;
@@ -262,7 +278,15 @@ export class AnalysisService implements OnModuleInit {
           );
         }
 
-        await this.updateStep(runId, 'preparing_home', 70);
+        const accountCount = aiResult.accounts?.length ?? 0;
+        await this.updateStep(
+          runId,
+          'grouping_accounts',
+          accountProgress(i, 2),
+          accountCount > 0
+            ? `계정별로 묶고 있어요. (${accountCount}개 계정 확인)`
+            : undefined,
+        );
         await this.saveResults(account.id, runId, aiResult, lastEmailDate);
       }
 
@@ -279,6 +303,9 @@ export class AnalysisService implements OnModuleInit {
         await this.markFailed(runId, 'AI 분석 서버 호출에 모두 실패했습니다.');
         return;
       }
+
+      await this.updateStep(runId, 'assessing_risks', 75);
+      await this.updateStep(runId, 'preparing_actions', 90);
 
       await this.prisma.analysisRun.update({
         where: { id: runId },
@@ -405,14 +432,14 @@ export class AnalysisService implements OnModuleInit {
     });
   }
 
-  private async updateStep(runId: string, step: string, progress: number) {
+  private async updateStep(runId: string, step: string, progress: number, message?: string) {
     await this.prisma.analysisRun.update({
       where: { id: runId },
       data: {
         status: 'scanning',
         currentStep: step,
         progress,
-        displayMessage: STEP_MESSAGES[step],
+        displayMessage: message ?? STEP_MESSAGES[step],
       },
     });
   }

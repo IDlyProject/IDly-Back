@@ -41,13 +41,15 @@ export class AnalysisStatusResponseDto {
   @ApiProperty({
     enum: [
       'waiting',
-      'checking_connected_mail',
-      'collecting_account_signals',
-      'preparing_home',
+      'fetching_mails',
+      'finding_security',
+      'grouping_accounts',
+      'assessing_risks',
+      'preparing_actions',
       'completed',
       'failed',
     ],
-    example: 'preparing_home',
+    example: 'grouping_accounts',
   })
   currentStep: string;
 

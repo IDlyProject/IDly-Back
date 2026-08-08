@@ -39,11 +39,16 @@ export class UsersController {
   @Patch('me')
   @ApiTags('1-2. 회원가입')
   @ApiOperation({
-    summary: '대표 계정 설정 — 이름·전화번호·연령대 저장',
-    description: `온보딩 첫 화면(대표 계정 설정)에서 이름·전화번호·연령대를 저장합니다.
+    summary: '프로필 저장 — 이름·전화번호·연령대 및 약관 동의 저장',
+    description: `온보딩(프로필 설정 + 약관 동의)과 마이 화면(4-1) 프로필 수정에 모두 사용합니다.
 
 변경할 필드만 보내면 됩니다 (partial update).
-마이 화면(4-1)에서 프로필 수정 시에도 동일 API를 사용합니다.`,
+
+**온보딩 시**: \`requiredTermsAgreed: true\`를 함께 전송하면 약관 동의가 함께 저장됩니다.
+- \`requiredTermsAgreedAt\`은 최초 동의 시각으로만 기록되며 이후 변경되지 않습니다.
+- \`notificationAgreed\`, \`marketingAgreed\`는 선택 동의로, 생략 시 기존 값을 유지합니다.
+
+**마이 화면 프로필 수정 시**: 프로필 필드만 전송하면 됩니다.`,
   })
   @ApiResponse({
     status: 200,
@@ -57,13 +62,9 @@ export class UsersController {
   @Post('me/consent')
   @ApiTags('1-2. 회원가입')
   @ApiOperation({
-    summary: '서비스 이용 동의 저장',
-    description: `온보딩 약관 동의 화면의 필수 약관 통합 동의와 선택 항목을 저장합니다.
-
-- \`requiredTermsAgreed\`: 필수 약관 3종 통합 동의 — 반드시 \`true\`
-- \`requiredTermsAgreedAt\`: 최초 필수 약관 동의 시각으로 자동 저장
-- \`notificationAgreed\`: 실시간 보안 알림 수신 동의 (선택) — 생략 시 기존 값 유지
-- \`marketingAgreed\`: 마케팅 정보 수신 동의 (선택) — 생략 시 기존 값 유지`,
+    deprecated: true,
+    summary: '[deprecated] 서비스 이용 동의 저장 — PATCH /users/me 사용 권장',
+    description: `**이 엔드포인트는 더 이상 사용하지 않습니다.**\n\n약관 동의 저장 기능이 \`PATCH /users/me\`에 통합되었습니다. \`requiredTermsAgreed\`, \`notificationAgreed\`, \`marketingAgreed\` 필드를 \`PATCH /users/me\` 요청에 포함하세요.`,
   })
   @ApiResponse({
     status: 201,
