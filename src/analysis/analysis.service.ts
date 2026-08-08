@@ -49,9 +49,11 @@ import {
 
 const STEP_MESSAGES: Record<string, string> = {
   waiting: '분석을 준비하고 있어요.',
-  checking_connected_mail: '연결된 Gmail을 확인하고 있어요.',
-  collecting_account_signals: '계정 보안 신호를 수집하고 있어요.',
-  preparing_home: '홈 화면을 준비하고 있어요.',
+  fetching_mails: '메일을 불러오고 있어요.',
+  finding_security: '보안 관련 메일을 찾고 있어요.',
+  grouping_accounts: '계정별로 묶고 있어요.',
+  assessing_risks: '위험도를 판단하고 있어요.',
+  preparing_actions: '필요한 조치를 정리하고 있어요.',
   completed: '메일 원문은 저장하지 않고 분석 결과만 정리했어요.',
   failed: '분석을 완료하지 못했어요. 잠시 후 다시 시도해 주세요.',
 };
@@ -200,10 +202,9 @@ export class AnalysisService implements OnModuleInit {
     const partialErrors: string[] = [];
 
     try {
-      await this.updateStep(runId, 'checking_connected_mail', 10);
+      await this.updateStep(runId, 'fetching_mails', 10);
 
       for (const account of accounts) {
-        await this.updateStep(runId, 'collecting_account_signals', 30);
         const accountRef = gmailAccountLogRef(account);
         this.logger.log(`[${accountRef}] mbox 수집 시작`);
 
@@ -234,6 +235,8 @@ export class AnalysisService implements OnModuleInit {
           `[${accountRef}] ${count}개, ${sizeBytes} bytes → AI 전송`,
         );
 
+        await this.updateStep(runId, 'finding_security', 35);
+
         aiAttempts += 1;
         let aiResult: AiAnalyzeResponse = { accounts: [] };
         try {
@@ -262,9 +265,12 @@ export class AnalysisService implements OnModuleInit {
           );
         }
 
-        await this.updateStep(runId, 'preparing_home', 70);
+        await this.updateStep(runId, 'grouping_accounts', 55);
         await this.saveResults(account.id, runId, aiResult, lastEmailDate);
       }
+
+      await this.updateStep(runId, 'assessing_risks', 75);
+      await this.updateStep(runId, 'preparing_actions', 90);
 
       // Fail the run if every Gmail or AI attempt failed (no usable results)
       if (gmailAttempts > 0 && gmailSuccesses === 0) {
