@@ -20,6 +20,7 @@ describe('UsersService.updateProfile', () => {
     expect(mockUpdate).toHaveBeenCalledWith({
       where: { id: 'user-a' },
       data: { name: '홍길동' },
+      select: expect.objectContaining({ id: true, name: true }),
     });
   });
 

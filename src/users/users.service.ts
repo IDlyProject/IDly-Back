@@ -277,6 +277,17 @@ export class UsersService {
     return this.prisma.user.update({
       where: { id: userId },
       data: { ...profileFields, ...consentData },
+      select: {
+        id: true,
+        name: true,
+        phone: true,
+        ageGroup: true,
+        requiredTermsAgreed: true,
+        requiredTermsAgreedAt: true,
+        notificationAgreed: true,
+        marketingAgreed: true,
+        createdAt: true,
+      },
     });
   }
 
