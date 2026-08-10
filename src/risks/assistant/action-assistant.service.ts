@@ -103,8 +103,9 @@ function buildExternalCard(
         securityUrl: registry.securityUrl ?? undefined,
       }
     : null;
-  const url = item.externalUrl
-    ?? resolveKbUrl(registryForKbUrl, officialUrlKind ?? null)
+  // 액션/LLM 산출물의 externalUrl을 "공식" 카드로 신뢰하지 않는다.
+  // 사용자에게 노출하는 링크는 서비스 레지스트리 화이트리스트에서만 고른다.
+  const url = resolveKbUrl(registryForKbUrl, officialUrlKind ?? null)
     ?? registry?.officialUrl
     ?? null;
   if (!url) return null;
@@ -167,10 +168,11 @@ function buildMessageDto(msg: DbMessage) {
   };
 }
 
-function calcProgress(items: DbActionItem[]) {
-  const doneCount = items.filter((i) => i.status === 'done').length;
+export function calcProgress(items: DbActionItem[]) {
+  const visibleItems = items.filter((i) => i.status !== 'skipped');
+  const doneCount = visibleItems.filter((i) => i.status === 'done').length;
   // 응답 필드명은 하위 호환을 위해 유지하지만, 진행률은 화면에 노출된 전체 조치 기준이다.
-  const totalRequired = items.length;
+  const totalRequired = visibleItems.length;
   let label: string | null = null;
   if (totalRequired > 0) {
     label = doneCount >= totalRequired ? '모두 완료' : `${doneCount}/${totalRequired} 완료`;
@@ -411,8 +413,8 @@ export class ActionAssistantService {
     const displayName = sa.displayName ?? cleanServiceName(sa.serviceName);
 
     let userMessage: ReturnType<typeof buildMessageDto> | null = null;
-    const newAssistantMessages: typeof items[0][] = []; // 타입 재사용 회피용 — 아래서 직접 생성
     const assistantMsgs: { role: string; type: string; content: string; metadata?: ActionMessageMeta }[] = [];
+    let completedAction: { itemId: string; resolvesAccount: boolean } | null = null;
 
     let sessionPatch: Partial<{
       activeActionItemId: string | null;
@@ -449,31 +451,26 @@ export class ActionAssistantService {
       if (body.feedbackValue === 'completed') {
         if (item.status === 'done') throw new BadRequestException('이미 완료된 조치 항목입니다.');
 
-        // user chip
-        const userMsg = await this.prisma.actionMessage.create({
-          data: { sessionId: session.id, role: 'user', type: 'user_chip', content: '조치를 완료했어요 !' },
-        });
-        userMessage = buildMessageDto(userMsg);
-
         const updatedItems = items.map((i) => i.id === item.id ? { ...i, status: 'done' } : i);
-        const remainingItems = updatedItems.filter((i) => i.status !== 'done');
+        const remainingItems = updatedItems.filter(
+          (i) => i.status !== 'done' && i.status !== 'skipped',
+        );
         const progress = calcProgress(updatedItems);
 
         if (remainingItems.length === 0) {
-          // 전체 완료 — 트랜잭션으로 묶음
-          await this.prisma.$transaction([
-            this.prisma.actionItem.update({ where: { id: item.id }, data: { status: 'done' } }),
-            this.prisma.actionAttempt.create({ data: { sessionId: session.id, actionItemId: item.id, status: 'completed' } }),
-            this.prisma.serviceAccount.update({ where: { id: serviceAccountId }, data: { status: 'resolved', resolvedAt: new Date() } }),
-          ]);
-          await this.invalidateSnapshot(userId);
-
           // 완료된 목록 메시지
           assistantMsgs.push({
             role: 'assistant',
             type: 'action_list',
             content: '모든 조치 완료',
-            metadata: { actionList: { title: '모든 조치 완료', actionIds: updatedItems.map((i) => i.id) } },
+            metadata: {
+              actionList: {
+                title: '모든 조치 완료',
+                actionIds: updatedItems
+                  .filter((i) => i.status !== 'skipped')
+                  .map((i) => i.id),
+              },
+            },
           });
 
           // celebration
@@ -485,7 +482,7 @@ export class ActionAssistantService {
               celebration: {
                 emoji: '🎉',
                 title: `${displayName} 계정이 안전해졌어요!`,
-                subtitle: `${updatedItems.length}가지 보안 조치를 모두 마쳤어요. 비정상적인 접근이 생기면 바로 알려드릴게요.`,
+                subtitle: `${updatedItems.filter((i) => i.status !== 'skipped').length}가지 보안 조치를 모두 마쳤어요. 비정상적인 접근이 생기면 바로 알려드릴게요.`,
               },
             },
           });
@@ -531,13 +528,8 @@ export class ActionAssistantService {
             composerEnabled: false,
             composerPlaceholder: null,
           };
+          completedAction = { itemId: item.id, resolvesAccount: true };
         } else {
-          // 남은 조치 있음
-          await this.prisma.$transaction([
-            this.prisma.actionItem.update({ where: { id: item.id }, data: { status: 'done' } }),
-            this.prisma.actionAttempt.create({ data: { sessionId: session.id, actionItemId: item.id, status: 'completed' } }),
-          ]);
-
           const progressText = progress.label ? `완료! ${progress.label}` : '완료!';
           const remainCount = remainingItems.length;
           assistantMsgs.push({
@@ -550,10 +542,18 @@ export class ActionAssistantService {
             type: 'action_list',
             content: '남은 조치 사항',
             // dynamic.html makeRemainingList: 전체(완료 포함) 렌더, done은 회색 체크로 표시
-            metadata: { actionList: { title: '남은 조치 사항', actionIds: updatedItems.map((i) => i.id) } },
+            metadata: {
+              actionList: {
+                title: '남은 조치 사항',
+                actionIds: updatedItems
+                  .filter((i) => i.status !== 'skipped')
+                  .map((i) => i.id),
+              },
+            },
           });
 
           sessionPatch = { activeActionItemId: null, feedbackEnabled: false, composerEnabled: false, composerPlaceholder: null };
+          completedAction = { itemId: item.id, resolvesAccount: false };
         }
 
       } else {
@@ -633,26 +633,107 @@ export class ActionAssistantService {
       throw new BadRequestException('user_text 타입은 지원되지 않습니다. failure_reason을 사용해주세요.');
     }
 
-    // assistant 메시지 일괄 저장 (+1ms offset으로 동일 트랜잭션 내 순서 보장)
+    // 완료 피드백은 조치/계정/세션/메시지를 하나의 트랜잭션에서 commit한다.
     const msgBaseTime = Date.now();
-    const savedAssistant = await this.prisma.$transaction(
-      assistantMsgs.map((m, i) =>
-        this.prisma.actionMessage.create({
+    let savedAssistant: DbMessage[];
+    if (completedAction) {
+      const persisted = await this.prisma.$transaction(async (tx) => {
+        const claimedSession = await tx.actionSession.updateMany({
+          where: {
+            id: session.id,
+            status: 'active',
+            feedbackEnabled: true,
+            activeActionItemId: completedAction.itemId,
+          },
+          data: sessionPatch,
+        });
+        if (claimedSession.count !== 1) {
+          throw new BadRequestException('이미 처리된 조치 요청입니다.');
+        }
+
+        const claimedAction = await tx.actionItem.updateMany({
+          where: {
+            id: completedAction.itemId,
+            status: { in: ['pending', 'failed'] },
+          },
+          data: { status: 'done' },
+        });
+        if (claimedAction.count !== 1) {
+          throw new BadRequestException('이미 완료된 조치 항목입니다.');
+        }
+
+        await tx.actionAttempt.create({
           data: {
             sessionId: session.id,
-            role: m.role,
-            type: m.type,
-            content: m.content,
-            metadata: m.metadata ? (m.metadata as unknown as Prisma.InputJsonValue) : Prisma.JsonNull,
-            createdAt: new Date(msgBaseTime + i),
+            actionItemId: completedAction.itemId,
+            status: 'completed',
           },
-        }),
-      ),
-    );
+        });
 
-    // session 상태 업데이트
-    if (Object.keys(sessionPatch).length > 0) {
-      await this.prisma.actionSession.update({ where: { id: session.id }, data: sessionPatch });
+        if (completedAction.resolvesAccount) {
+          await tx.serviceAccount.update({
+            where: { id: serviceAccountId },
+            data: { status: 'resolved', resolvedAt: new Date() },
+          });
+          await tx.analysisRun.updateMany({
+            where: { userId, status: 'completed' },
+            data: {
+              reportSnapshot: {
+                status: 'invalidated',
+              } as unknown as Prisma.InputJsonValue,
+            },
+          });
+        }
+
+        const createdUser = await tx.actionMessage.create({
+          data: {
+            sessionId: session.id,
+            role: 'user',
+            type: 'user_chip',
+            content: '조치를 완료했어요 !',
+            createdAt: new Date(msgBaseTime),
+          },
+        });
+        const createdAssistant: DbMessage[] = [];
+        for (const [index, message] of assistantMsgs.entries()) {
+          createdAssistant.push(
+            await tx.actionMessage.create({
+              data: {
+                sessionId: session.id,
+                role: message.role,
+                type: message.type,
+                content: message.content,
+                metadata: message.metadata
+                  ? (message.metadata as unknown as Prisma.InputJsonValue)
+                  : Prisma.JsonNull,
+                createdAt: new Date(msgBaseTime + index + 1),
+              },
+            }),
+          );
+        }
+        return { createdUser, createdAssistant };
+      });
+      userMessage = buildMessageDto(persisted.createdUser);
+      savedAssistant = persisted.createdAssistant;
+    } else {
+      savedAssistant = await this.prisma.$transaction(
+        assistantMsgs.map((m, i) =>
+          this.prisma.actionMessage.create({
+            data: {
+              sessionId: session.id,
+              role: m.role,
+              type: m.type,
+              content: m.content,
+              metadata: m.metadata ? (m.metadata as unknown as Prisma.InputJsonValue) : Prisma.JsonNull,
+              createdAt: new Date(msgBaseTime + i),
+            },
+          }),
+        ),
+      );
+
+      if (Object.keys(sessionPatch).length > 0) {
+        await this.prisma.actionSession.update({ where: { id: session.id }, data: sessionPatch });
+      }
     }
 
     const updatedSession = await this.prisma.actionSession.findUniqueOrThrow({ where: { id: session.id } });
@@ -666,7 +747,7 @@ export class ActionAssistantService {
         celebration: {
           emoji: '🎉',
           title: `${displayName} 계정이 안전해졌어요!`,
-          subtitle: `${finalItems.length}가지 보안 조치를 모두 마쳤어요.`,
+          subtitle: `${finalItems.filter((i) => i.status !== 'skipped').length}가지 보안 조치를 모두 마쳤어요.`,
         },
       };
     }
@@ -676,7 +757,9 @@ export class ActionAssistantService {
       activeActionItemId: updatedSession.activeActionItemId,
       feedbackEnabled: updatedSession.feedbackEnabled,
       composerEnabled: updatedSession.composerEnabled,
-      composerPlaceholder: updatedSession.composerPlaceholder,
+      composerPlaceholder: updatedSession.composerEnabled
+        ? (updatedSession.composerPlaceholder ?? '막힌 부분을 알려주세요')
+        : '조치가 막히면 아래 버튼을 눌러주세요',
       sessionStatus: updatedSession.status,
       readOnly: updatedSession.status !== 'active',
       progress,
@@ -722,7 +805,9 @@ export class ActionAssistantService {
     }
 
     // tip
-    const tipText = kbForItem?.tip ?? (items.filter((i) => i.status !== 'done').length <= 1
+    const tipText = kbForItem?.tip ?? (items.filter((i) =>
+      i.status === 'pending' || i.status === 'failed',
+    ).length <= 1
       ? '완료하면 모든 보안 조치가 끝나요!'
       : '변경 완료 후 다시 돌아오시면, 나머지 조치도 도와드릴게요!');
     messages.push({ role: 'assistant', type: 'tip', content: tipText });
@@ -764,7 +849,7 @@ export class ActionAssistantService {
         celebration: {
           emoji: '🎉',
           title: `${displayName} 계정이 안전해졌어요!`,
-          subtitle: `${items.length}가지 보안 조치를 모두 마쳤어요.`,
+          subtitle: `${items.filter((i) => i.status !== 'skipped').length}가지 보안 조치를 모두 마쳤어요.`,
         },
       };
     }
@@ -779,7 +864,7 @@ export class ActionAssistantService {
       composerEnabled: session.composerEnabled,
       composerPlaceholder: session.composerEnabled
         ? (session.composerPlaceholder ?? '막힌 부분을 알려주세요')
-        : '메시지를 입력하세요',
+        : '조치가 막히면 아래 버튼을 눌러주세요',
       title: '지금 바로 조치하기',
       botProfile: { name: '보안 도우미', avatarKey: 'owl' },
       progress,
@@ -788,7 +873,9 @@ export class ActionAssistantService {
         title: sa.headline ?? `${displayName} 계정 보안 위험 감지`,
         description: sa.summary ?? sa.interpretation ?? `${riskLevelMap[sa.riskLevel] ?? ''} 등급 보안 조치가 필요해요.`,
       },
-      recommendedActions: items.map((i) =>
+      recommendedActions: items
+        .filter((i) => i.status !== 'skipped')
+        .map((i) =>
         buildActionStepDto(i, displayName, registry, sa.primaryRiskType),
       ),
       messages: messages.map(buildMessageDto),
@@ -886,13 +973,6 @@ export class ActionAssistantService {
         data: { status: 'skipped' },
       });
     }
-  }
-
-  private async invalidateSnapshot(userId: string) {
-    await this.prisma.analysisRun.updateMany({
-      where: { userId, status: 'completed' },
-      data: { reportSnapshot: { status: 'invalidated' } as unknown as Prisma.InputJsonValue },
-    });
   }
 
   private async callSolarChat(

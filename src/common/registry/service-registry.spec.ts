@@ -22,6 +22,11 @@ describe('resolveService', () => {
     expect(resolveService('Twitter password reset').serviceName).toBe('Twitter');
   });
 
+  it('prefers an exact service name over an earlier duplicate alias', () => {
+    expect(resolveService('AWS').serviceName).toBe('AWS');
+    expect(resolveService('YouTube').serviceName).toBe('YouTube');
+  });
+
   it('falls back to the first non-empty candidate', () => {
     const service = resolveService('', undefined, 'Custom Service');
 

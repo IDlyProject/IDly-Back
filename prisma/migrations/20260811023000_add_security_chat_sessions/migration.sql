@@ -1,7 +1,3 @@
--- AlterTable
-ALTER TABLE "SecurityChat"
-ADD COLUMN "currentSessionStartedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP;
-
 -- CreateTable
 CREATE TABLE "SecurityChatSession" (
     "id" TEXT NOT NULL,
@@ -32,3 +28,23 @@ FROM "SecurityChat" AS chat
 LEFT JOIN "SecurityChatMessage" AS message ON message."chatId" = chat."id"
 GROUP BY chat."id", chat."createdAt"
 HAVING COUNT(message."id") > 0;
+
+-- Add the explicit session relation after legacy sessions exist.
+ALTER TABLE "SecurityChatMessage"
+ADD COLUMN "sessionId" TEXT;
+
+UPDATE "SecurityChatMessage" AS message
+SET "sessionId" = CONCAT('legacy-', message."chatId");
+
+ALTER TABLE "SecurityChatMessage"
+ALTER COLUMN "sessionId" SET NOT NULL;
+
+-- CreateIndex
+CREATE INDEX "SecurityChatMessage_sessionId_createdAt_idx"
+ON "SecurityChatMessage"("sessionId", "createdAt");
+
+-- AddForeignKey
+ALTER TABLE "SecurityChatMessage"
+ADD CONSTRAINT "SecurityChatMessage_sessionId_fkey"
+FOREIGN KEY ("sessionId") REFERENCES "SecurityChatSession"("id")
+ON DELETE CASCADE ON UPDATE CASCADE;

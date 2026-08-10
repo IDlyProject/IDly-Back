@@ -45,10 +45,11 @@ export class RisksService {
       riskType: e.riskType,
     }));
 
-    const pendingItems = sa.actionItems.filter(
+    const visibleItems = sa.actionItems.filter((a) => a.status !== 'skipped');
+    const pendingItems = visibleItems.filter(
       (a) => a.status === 'pending' || a.status === 'failed',
     );
-    const requiredItems = sa.actionItems.filter((a) => a.isRequired);
+    const requiredItems = visibleItems.filter((a) => a.isRequired);
     const completedRequiredCount = requiredItems.filter((a) => a.status === 'done').length;
     const firstPending = pendingItems[0] ?? null;
     const activeSessionId = sa.actionSessions[0]?.id ?? null;
@@ -79,9 +80,11 @@ export class RisksService {
       interpretation: sa.interpretation,
       analyzedAt: sa.lastAnalyzedAt?.toISOString() ?? null,
       accountSummary: {
-        actionCount: sa.actionItems.length,
-        completedActionCount: sa.actionItems.filter((a) => a.status === 'done').length,
-        remainingActionCount: sa.actionItems.filter((a) => a.status !== 'done').length,
+        actionCount: visibleItems.length,
+        completedActionCount: visibleItems.filter((a) => a.status === 'done').length,
+        remainingActionCount: visibleItems.filter(
+          (a) => a.status === 'pending' || a.status === 'failed',
+        ).length,
         requiredActionCount: requiredItems.length,
         completedRequiredActionCount: completedRequiredCount,
         remainingRequiredActionCount: Math.max(0, requiredItems.length - completedRequiredCount),
@@ -97,7 +100,7 @@ export class RisksService {
           }
         : null,
       recentEvents,
-      actionItems: sa.actionItems.map((a) => ({
+      actionItems: visibleItems.map((a) => ({
         id: a.id,
         type: a.type,
         title: a.title,
@@ -115,7 +118,7 @@ export class RisksService {
       actionGuide: {
         title: '이렇게 대응하세요',
         description: sa.interpretation ?? '',
-        steps: sa.actionItems.map((a) => ({
+        steps: visibleItems.map((a) => ({
           id: a.id,
           title: a.title,
           description: a.description,

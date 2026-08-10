@@ -64,7 +64,7 @@ export const SERVICE_REGISTRY: ServiceRegistryItem[] = [
   // ── Commerce ───────────────────────────────────────────────────────────
   {
     serviceName: 'Amazon',
-    aliases: ['amazon', '아마존', 'aws'],
+    aliases: ['amazon', '아마존'],
     domain: 'amazon.com',
     officialUrl: 'https://www.amazon.com',
   },
@@ -795,6 +795,25 @@ export function resolveService(...candidates: (string | null | undefined)[]): Re
     .map((value) => value?.trim())
     .filter((value): value is string => Boolean(value));
   const lower = texts.join('\n').toLowerCase();
+
+  // 서비스 정규명과 정확히 일치하는 입력을 alias 부분 매칭보다 우선한다.
+  // 예: "AWS"가 앞서 등록된 Amazon의 alias로 분류되는 충돌을 방지한다.
+  const exactName = SERVICE_REGISTRY.find((item) =>
+    texts.some(
+      (value) => value.toLowerCase() === item.serviceName.toLowerCase(),
+    ),
+  );
+  if (exactName) {
+    return {
+      serviceName: exactName.serviceName,
+      iconUrl: `https://www.google.com/s2/favicons?domain=${exactName.domain}&sz=128`,
+      iconLabel: exactName.serviceName[0].toUpperCase(),
+      officialUrl: exactName.officialUrl,
+      passwordUrl: exactName.passwordUrl ?? null,
+      securityUrl: exactName.securityUrl ?? null,
+      fromRegistry: true,
+    };
+  }
 
   // 가장 긴(구체적) 매칭을 선택 — 등록 순서에 덜 민감
   let best: { item: (typeof SERVICE_REGISTRY)[number]; score: number } | null = null;

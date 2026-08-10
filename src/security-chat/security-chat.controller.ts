@@ -5,6 +5,7 @@ import {
   HttpCode,
   Param,
   Post,
+  Query,
   Req,
   UseGuards,
 } from '@nestjs/common';
@@ -16,13 +17,17 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
-import { IsString, MaxLength } from 'class-validator';
+import { IsString, IsUUID, MaxLength } from 'class-validator';
 import { SecurityChatService } from './security-chat.service';
 import { JwtGuard } from '../auth/jwt.guard';
 import { RateLimit } from '../common/guards/rate-limit.decorator';
 import { RateLimitGuard } from '../common/guards/rate-limit.guard';
 
 class SendSecurityChatDto {
+  @ApiProperty({ description: 'POST /security-chat/sessions에서 발급된 세션 UUID' })
+  @IsUUID()
+  sessionId: string;
+
   @ApiProperty({
     example: 'Twitter 비밀번호는 어디서 바꾸면 돼? 공식 링크랑 같이 알려줘',
     description:
@@ -45,7 +50,7 @@ export class SecurityChatController {
   @HttpCode(200)
   @RateLimit({ limit: 30, windowMs: 60_000, key: 'user' })
   @ApiOperation({ summary: '새 채팅 세션 시작 — 진입 시 호출' })
-  @ApiResponse({ status: 200, description: '{ hasHistory: boolean }' })
+  @ApiResponse({ status: 200, description: '{ sessionId: string, hasHistory: boolean }' })
   startSession(@Req() req) {
     return this.securityChatService.startNewSession(req.user.sub);
   }
@@ -62,8 +67,8 @@ export class SecurityChatController {
   @RateLimit({ limit: 30, windowMs: 60_000, key: 'user' })
   @ApiOperation({ summary: '이전 세션 목록 조회 (요약 포함)' })
   @ApiResponse({ status: 200, description: '세션 목록 (현재 세션 제외)' })
-  getSessionList(@Req() req) {
-    return this.securityChatService.getSessionList(req.user.sub);
+  getSessionList(@Req() req, @Query('excludeSessionId') excludeSessionId?: string) {
+    return this.securityChatService.getSessionList(req.user.sub, excludeSessionId);
   }
 
   @Get('sessions/:sessionId')
@@ -94,6 +99,10 @@ export class SecurityChatController {
   @ApiResponse({ status: 400, description: '민감정보 입력 또는 유효하지 않은 요청' })
   @ApiResponse({ status: 429, description: '유저별 요청 제한 초과' })
   sendMessage(@Req() req, @Body() body: SendSecurityChatDto) {
-    return this.securityChatService.sendMessage(req.user.sub, body.message);
+    return this.securityChatService.sendMessage(
+      req.user.sub,
+      body.sessionId,
+      body.message,
+    );
   }
 }

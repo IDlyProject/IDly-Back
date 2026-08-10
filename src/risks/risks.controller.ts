@@ -399,7 +399,7 @@ export class RisksController {
 
 **type 종류와 화면 상태 전이**
 - \`action_select\`: 사용자가 추천 조치 항목을 선택합니다. \`actionItemId\` 필수. 응답으로 \`official_link\`, \`tip\`, \`feedback_actions\`가 내려옵니다.
-- \`feedback\` + \`completed\`: 현재 \`activeActionItemId\`를 완료 처리합니다. 남은 필수 조치가 있으면 \`action_list\`, 모두 끝나면 \`celebration\` + 선택적 \`card_news\` + \`exit_cta\`가 내려옵니다.
+- \`feedback\` + \`completed\`: 현재 \`activeActionItemId\`를 완료 처리합니다. 남은 조치가 있으면 \`action_list\`, 화면에 노출된 조치를 모두 끝내면 \`celebration\` + 선택적 \`card_news\` + \`exit_cta\`가 내려옵니다.
 - \`feedback\` + \`failed\`: 완료하지 못한 상태로 전환하고 \`composerEnabled=true\`, \`composerPlaceholder\`를 내려 입력창을 엽니다.
 - \`failure_reason\`: 실패 사유를 저장하고 같은 조치의 도움말/공식 링크/피드백 버튼을 다시 내려줍니다.
 

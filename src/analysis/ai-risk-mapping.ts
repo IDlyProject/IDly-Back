@@ -44,25 +44,23 @@ export function toRiskLevel(
     : false;
 
   if (level === '위험') {
-    if (hasForceHighRisk || (normalizedScore ?? 0) >= 7) return 'high';
-    return 'medium';
+    return 'high';
   }
 
   if (level === '주의') {
-    if (hasForceHighRisk || (normalizedScore ?? 0) >= 8) return 'high';
-    return 'medium';
+    return hasForceHighRisk ? 'high' : 'medium';
   }
 
   if (level === '양호') {
-    if ((normalizedScore ?? 0) >= 6 && hasForceHighRisk) return 'medium';
-    if ((normalizedScore ?? 0) >= 4) return 'low';
+    if (hasForceHighRisk) return 'medium';
+    if ((normalizedScore ?? 0) > 0) return 'low';
     return 'safe';
   }
 
   if (normalizedScore === null) return hasForceHighRisk ? 'medium' : 'safe';
-  if (hasForceHighRisk && normalizedScore >= 4) return 'high';
-  if (normalizedScore >= 7) return 'high';
-  if (normalizedScore >= 4) return 'medium';
+  if (hasForceHighRisk && normalizedScore >= 2.5) return 'high';
+  if (normalizedScore >= 5) return 'high';
+  if (normalizedScore >= 2.5) return 'medium';
   if (normalizedScore > 0) return 'low';
   return 'safe';
 }

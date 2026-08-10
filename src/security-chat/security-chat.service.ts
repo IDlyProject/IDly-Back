@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
 import { Prisma } from '@prisma/client';
@@ -13,7 +13,6 @@ import {
 import { ACTION_KB, getKbSteps, matchKbEntry, resolveKbUrl, stepTypeToEmoji } from '../risks/policy/action-kb';
 import { assertNoSensitiveData } from '../common/sanitize/secret-detector';
 import {
-  redactServiceLabel,
   sanitizeLlmOutput,
 } from '../common/sanitize/text-safety';
 
@@ -119,72 +118,57 @@ export class SecurityChatService {
     private readonly config: ConfigService,
   ) {}
 
-  async startNewSession(userId: string): Promise<{ hasHistory: boolean }> {
-    const now = new Date();
+  async startNewSession(
+    userId: string,
+  ): Promise<{ sessionId: string; hasHistory: boolean }> {
+    return this.prisma.$transaction(async (tx) => {
+      const chat = await tx.securityChat.upsert({
+        where: { userId },
+        create: { userId },
+        update: {},
+      });
+      const hasHistory =
+        (await tx.securityChatSession.count({
+          where: { chatId: chat.id, messages: { some: {} } },
+        })) > 0;
+      const session = await tx.securityChatSession.create({
+        data: { chatId: chat.id },
+      });
 
-    const chat = await this.prisma.securityChat.upsert({
-      where: { userId },
-      create: { userId, currentSessionStartedAt: now },
-      update: { currentSessionStartedAt: now },
+      return { sessionId: session.id, hasHistory };
     });
-
-    // 세션 레코드 생성 (목록 조회용)
-    await this.prisma.securityChatSession.create({
-      data: { chatId: chat.id, startedAt: now },
-    });
-
-    // 빈 세션 레코드가 여러 개 생겨도 실제 이전 메시지가 없으면 false다.
-    const hasHistoryFinal = await this.prisma.securityChatMessage.count({
-      where: { chatId: chat.id, createdAt: { lt: now } },
-    }) > 0;
-
-    return { hasHistory: hasHistoryFinal };
   }
 
-  async getSessionList(userId: string) {
+  async getSessionList(userId: string, excludeSessionId?: string) {
     const chat = await this.prisma.securityChat.findUnique({ where: { userId } });
     if (!chat) return { sessions: [] };
 
-    // 현재 세션 제외 — currentSessionStartedAt 이전에 시작된 세션만
     const sessions = await this.prisma.securityChatSession.findMany({
-      where: { chatId: chat.id, startedAt: { lt: chat.currentSessionStartedAt } },
+      where: {
+        chatId: chat.id,
+        ...(excludeSessionId ? { id: { not: excludeSessionId } } : {}),
+        messages: { some: {} },
+      },
       orderBy: { startedAt: 'desc' },
       take: 50,
+      include: {
+        messages: {
+          where: { role: 'user' },
+          orderBy: { createdAt: 'asc' },
+          take: 1,
+        },
+        _count: { select: { messages: true } },
+      },
     });
 
-    const result = await Promise.all(
-      sessions.map(async (session, i) => {
-        const nextStartedAt = i === 0
-          ? chat.currentSessionStartedAt
-          : sessions[i - 1].startedAt;
-
-        const firstUserMsg = await this.prisma.securityChatMessage.findFirst({
-          where: {
-            chatId: chat.id,
-            role: 'user',
-            createdAt: { gte: session.startedAt, lt: nextStartedAt },
-          },
-          orderBy: { createdAt: 'asc' },
-        });
-
-        const count = await this.prisma.securityChatMessage.count({
-          where: {
-            chatId: chat.id,
-            createdAt: { gte: session.startedAt, lt: nextStartedAt },
-          },
-        });
-
-        return {
-          id: session.id,
-          startedAt: session.startedAt.toISOString(),
-          summary: firstUserMsg?.content?.slice(0, 50) ?? '대화 내용 없음',
-          messageCount: count,
-        };
-      }),
-    );
-
-    // 메시지가 없는 세션(빈 세션)은 목록에서 제외
-    return { sessions: result.filter((s) => s.messageCount > 0) };
+    return {
+      sessions: sessions.map((session) => ({
+        id: session.id,
+        startedAt: session.startedAt.toISOString(),
+        summary: session.messages[0]?.content?.slice(0, 50) ?? '대화 내용 없음',
+        messageCount: session._count.messages,
+      })),
+    };
   }
 
   async getSessionMessages(userId: string, sessionId: string) {
@@ -194,18 +178,8 @@ export class SecurityChatService {
     const session = await this.prisma.securityChatSession.findUnique({ where: { id: sessionId } });
     if (!session || session.chatId !== chat.id) return { messages: [] };
 
-    // 이 세션의 끝 = 바로 다음 세션의 시작 (또는 현재 세션 시작)
-    const nextSession = await this.prisma.securityChatSession.findFirst({
-      where: { chatId: chat.id, startedAt: { gt: session.startedAt } },
-      orderBy: { startedAt: 'asc' },
-    });
-    const endAt = nextSession?.startedAt ?? chat.currentSessionStartedAt;
-
     const messages = await this.prisma.securityChatMessage.findMany({
-      where: {
-        chatId: chat.id,
-        createdAt: { gte: session.startedAt, lt: endAt },
-      },
+      where: { sessionId: session.id },
       orderBy: { createdAt: 'asc' },
       take: 200,
     });
@@ -220,11 +194,14 @@ export class SecurityChatService {
       update: {},
     });
 
+    const latestSession = await this.prisma.securityChatSession.findFirst({
+      where: { chatId: chat.id },
+      orderBy: { startedAt: 'desc' },
+    });
+    if (!latestSession) return this.buildChatResponse(chat.id, []);
+
     const messages = await this.prisma.securityChatMessage.findMany({
-      where: {
-        chatId: chat.id,
-        createdAt: { gte: chat.currentSessionStartedAt },
-      },
+      where: { sessionId: latestSession.id },
       orderBy: { createdAt: 'asc' },
       take: 50,
     });
@@ -235,11 +212,15 @@ export class SecurityChatService {
   async getHistory(userId: string) {
     const chat = await this.prisma.securityChat.findUnique({ where: { userId } });
     if (!chat) return { messages: [] };
+    const latestSession = await this.prisma.securityChatSession.findFirst({
+      where: { chatId: chat.id },
+      orderBy: { startedAt: 'desc' },
+    });
 
     const messages = await this.prisma.securityChatMessage.findMany({
       where: {
         chatId: chat.id,
-        createdAt: { lt: chat.currentSessionStartedAt },
+        ...(latestSession ? { sessionId: { not: latestSession.id } } : {}),
       },
       orderBy: { createdAt: 'asc' },
       take: 200,
@@ -248,19 +229,16 @@ export class SecurityChatService {
     return this.buildChatResponse(chat.id, messages);
   }
 
-  async sendMessage(userId: string, message: string) {
-    const chat = await this.prisma.securityChat.upsert({
-      where: { userId },
-      create: { userId },
-      update: {},
+  async sendMessage(userId: string, sessionId: string, message: string) {
+    const session = await this.prisma.securityChatSession.findFirst({
+      where: { id: sessionId, chat: { userId } },
     });
+    if (!session) throw new BadRequestException('유효하지 않은 채팅 세션입니다.');
+    const chatId = session.chatId;
 
-    // 현재 세션 메시지만 LLM 컨텍스트에 사용 (세션 간 기억 없음)
+    // 요청에 명시된 세션 메시지만 LLM 컨텍스트에 사용한다.
     const recentHistory = await this.prisma.securityChatMessage.findMany({
-      where: {
-        chatId: chat.id,
-        createdAt: { gte: chat.currentSessionStartedAt },
-      },
+      where: { sessionId },
       orderBy: { createdAt: 'desc' },
       take: this.HISTORY_LIMIT,
     });
@@ -273,7 +251,13 @@ export class SecurityChatService {
 
     // 유저 메시지 저장
     const userMsg = await this.prisma.securityChatMessage.create({
-      data: { chatId: chat.id, role: 'user', type: 'text', content: message.slice(0, 1000) },
+      data: {
+        chatId,
+        sessionId,
+        role: 'user',
+        type: 'text',
+        content: message.slice(0, 1000),
+      },
     });
 
     // 위험도 높은 SA 우선 — safe/resolved/skipped는 컨텍스트 제외, top 10 제한
@@ -337,14 +321,6 @@ export class SecurityChatService {
           content: linkCard.content,
           metadata: { externalCard: linkCard.externalCard },
         });
-        if (linkCard.cardNews) {
-          assistantMsgs.push({
-            role: 'assistant',
-            type: 'card_news',
-            content: linkCard.cardNews.title,
-            metadata: { cardNews: linkCard.cardNews },
-          });
-        }
       }
     }
 
@@ -387,7 +363,8 @@ export class SecurityChatService {
       assistantMsgs.map((m) =>
         this.prisma.securityChatMessage.create({
           data: {
-            chatId: chat.id,
+            chatId,
+            sessionId,
             role: m.role,
             type: m.type,
             content: m.content,
@@ -398,7 +375,7 @@ export class SecurityChatService {
     );
 
     return {
-      chatId: chat.id,
+      chatId,
       userMessage: buildMsgDto(userMsg),
       assistantMessages: saved.map(buildMsgDto),
     };
@@ -588,7 +565,6 @@ showExitCta: 대화를 마무리하거나 다른 페이지로 안내할 때 true
   }): {
     content: string;
     externalCard: NonNullable<ChatMessageMeta['externalCard']>;
-    cardNews?: NonNullable<ChatMessageMeta['cardNews']>;
   } | null {
     const { allSa, targetSaId, actionType, userMessage } = opts;
 
@@ -635,7 +611,6 @@ showExitCta: 대화를 마무리하거나 다른 페이지로 안내할 때 true
             trustLabel: '공식 페이지',
             ctaLabel: '페이지로 이동',
           },
-          cardNews: kbEntry?.cardNews ?? undefined,
         };
       }
     }
@@ -686,7 +661,6 @@ showExitCta: 대화를 마무리하거나 다른 페이지로 안내할 때 true
         trustLabel: '공식 페이지',
         ctaLabel: '페이지로 이동',
       },
-      cardNews: kbEntry?.cardNews ?? undefined,
     };
   }
 

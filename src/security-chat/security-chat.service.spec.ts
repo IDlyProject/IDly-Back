@@ -2,16 +2,17 @@ import { SecurityChatService } from './security-chat.service';
 
 describe('SecurityChatService.startNewSession', () => {
   it('reports history only when an earlier message exists', async () => {
-    const prisma = {
+    const tx = {
       securityChat: {
         upsert: jest.fn().mockResolvedValue({ id: 'chat-1' }),
       },
       securityChatSession: {
+        count: jest.fn().mockResolvedValue(0),
         create: jest.fn().mockResolvedValue({ id: 'session-1' }),
       },
-      securityChatMessage: {
-        count: jest.fn().mockResolvedValue(0),
-      },
+    };
+    const prisma = {
+      $transaction: jest.fn((callback) => callback(tx)),
     };
     const service = new SecurityChatService(
       prisma as never,
@@ -20,17 +21,16 @@ describe('SecurityChatService.startNewSession', () => {
     );
 
     await expect(service.startNewSession('user-1')).resolves.toEqual({
+      sessionId: 'session-1',
       hasHistory: false,
     });
-    expect(prisma.securityChatMessage.count).toHaveBeenCalledWith({
-      where: {
-        chatId: 'chat-1',
-        createdAt: { lt: expect.any(Date) },
-      },
+    expect(tx.securityChatSession.count).toHaveBeenCalledWith({
+      where: { chatId: 'chat-1', messages: { some: {} } },
     });
 
-    prisma.securityChatMessage.count.mockResolvedValue(1);
+    tx.securityChatSession.count.mockResolvedValue(1);
     await expect(service.startNewSession('user-1')).resolves.toEqual({
+      sessionId: 'session-1',
       hasHistory: true,
     });
   });
