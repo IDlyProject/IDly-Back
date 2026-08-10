@@ -242,7 +242,7 @@ export class SecurityChatService {
         metadata: {
           exitCtas: [
             { id: 'home', label: '홈으로 돌아가기', style: 'home', enabled: true, href: '/home' },
-            ...(hasMoreAction ? [{ id: 'next_account', label: '다음 계정 보안 조치 하기', style: 'next_account', enabled: true, href: '/risks' }] : []),
+            ...(hasMoreAction ? [{ id: 'next_account', label: '다음 계정 보안 조치 하기', style: 'next_account', enabled: true, href: '/home' }] : []),
             { id: 'report', label: '보안 리포트 보러 가기', style: 'report', enabled: true, href: '/report' },
           ],
         },
