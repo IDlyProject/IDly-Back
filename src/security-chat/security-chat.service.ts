@@ -433,9 +433,11 @@ export class SecurityChatService {
       .map((sa, i) => {
         const ref = `sa_${i + 1}`;
         refToId.set(ref, sa.id);
-        const displayName = redactServiceLabel(
-          sa.displayName ?? cleanServiceName(sa.serviceName),
-        );
+        // registry 등록 서비스면 정규 서비스명 사용, 미등록(개인 연락처 레이블 등)은 중립 표현
+        const registry = resolveService(sa.serviceName, sa.displayName);
+        const displayName = registry.fromRegistry
+          ? registry.serviceName
+          : '분류되지 않은 계정';
         const pending = sa.actionItems.filter(
           (a) => a.status === 'pending' || a.status === 'failed',
         );
