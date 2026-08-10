@@ -3,6 +3,7 @@ import {
   Controller,
   Get,
   HttpCode,
+  Param,
   Post,
   Req,
   UseGuards,
@@ -57,9 +58,25 @@ export class SecurityChatController {
     return this.securityChatService.getOrCreateChat(req.user.sub);
   }
 
+  @Get('sessions/list')
+  @RateLimit({ limit: 30, windowMs: 60_000, key: 'user' })
+  @ApiOperation({ summary: '이전 세션 목록 조회 (요약 포함)' })
+  @ApiResponse({ status: 200, description: '세션 목록 (현재 세션 제외)' })
+  getSessionList(@Req() req) {
+    return this.securityChatService.getSessionList(req.user.sub);
+  }
+
+  @Get('sessions/:sessionId')
+  @RateLimit({ limit: 30, windowMs: 60_000, key: 'user' })
+  @ApiOperation({ summary: '특정 세션 메시지 조회' })
+  @ApiResponse({ status: 200, description: '해당 세션의 메시지 목록' })
+  getSessionMessages(@Req() req, @Param('sessionId') sessionId: string) {
+    return this.securityChatService.getSessionMessages(req.user.sub, sessionId);
+  }
+
   @Get('history')
   @RateLimit({ limit: 30, windowMs: 60_000, key: 'user' })
-  @ApiOperation({ summary: '이전 세션 채팅 히스토리 조회' })
+  @ApiOperation({ summary: '이전 세션 채팅 히스토리 조회 (deprecated - 하위 호환)' })
   @ApiResponse({ status: 200, description: '현재 세션 이전의 모든 메시지' })
   getHistory(@Req() req) {
     return this.securityChatService.getHistory(req.user.sub);
