@@ -385,7 +385,7 @@ export class RisksController {
     return this.actionAssistantService.createSession(
       id,
       req.user.sub,
-      body?.bootstrapFirstAction ?? true,
+      body?.bootstrapFirstAction ?? false,
     );
   }
 

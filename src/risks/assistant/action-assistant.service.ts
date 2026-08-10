@@ -12,6 +12,7 @@ import {
   resolveStepHelp,
   noOfficialLinkGuidance,
   planKbActionMerge,
+  stepTypeToEmoji,
 } from '../policy/action-kb';
 import { assertNoSensitiveData } from '../../common/sanitize/secret-detector';
 import {
@@ -135,9 +136,10 @@ function buildActionStepDto(
   const selectable = item.status === 'pending' || item.status === 'failed';
   const kbEntry = resolveItemKb(item, riskType);
   const card = buildExternalCard(item, displayName, registry, kbEntry?.officialUrlKind);
+  const resolvedType = item.type !== 'unknown' ? item.type : (kbEntry?.stepType ?? item.type);
   return {
     id: item.id,
-    type: item.type !== 'unknown' ? item.type : (kbEntry?.stepType ?? item.type),
+    type: resolvedType,
     title: item.title,
     subtitle: item.description ?? null,
     description: item.description ?? null,
@@ -147,6 +149,7 @@ function buildActionStepDto(
     isRequired: item.isRequired,
     order: item.order,
     selectable,
+    iconEmoji: stepTypeToEmoji(resolvedType),
     externalCard: card,
     externalUrl: card?.url ?? item.externalUrl ?? null,
     officialUrl: card?.url ?? item.externalUrl ?? null,
@@ -259,7 +262,7 @@ export class ActionAssistantService {
   async createSession(
     serviceAccountId: string,
     userId: string,
-    bootstrapFirstAction = true,
+    bootstrapFirstAction = false,
   ) {
     const sa = await this.assertOwnership(serviceAccountId, userId);
 
@@ -459,7 +462,7 @@ export class ActionAssistantService {
             role: 'assistant',
             type: 'action_list',
             content: '모든 조치 완료',
-            metadata: { actionList: { title: '모든 조치 완료', actionIds: updatedItems.map((i) => i.id) } },
+            metadata: { actionList: { title: '모든 조치 완료', actionIds: updatedItems.filter((i) => i.isRequired).map((i) => i.id) } },
           });
 
           // celebration

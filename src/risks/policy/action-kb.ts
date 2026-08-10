@@ -662,3 +662,18 @@ export function planKbActionMerge(
 
   return { updates, creates, skipIds };
 }
+
+export function stepTypeToEmoji(stepType: string | null | undefined): string {
+  switch (stepType) {
+    case 'change_password': return '🔑';
+    case 'enable_2fa':
+    case 'setup_2fa': return '🛡️';
+    case 'logout_sessions': return '🚪';
+    case 'check_recovery': return '📧';
+    case 'review_apps':
+    case 'revoke_app_access': return '🔗';
+    case 'verify_activity': return '👁️';
+    case 'security_review': return '🔎';
+    default: return '🔒';
+  }
+}
