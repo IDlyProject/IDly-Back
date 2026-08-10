@@ -211,6 +211,10 @@ npm run start:dev
 | `ENABLE_SWAGGER` | production Swagger 노출 여부 |
 | `GMAIL_FETCH_BATCH_SIZE` | Gmail raw message fetch 동시 처리 크기. 메모리 보호를 위해 기본값은 보수적으로 운용 |
 | `GMAIL_MAX_RAW_MESSAGE_BYTES` | mbox에 포함할 단일 raw message 최대 크기. 초과 메일은 메모리 보호를 위해 제외 |
+| `GMAIL_PUSH_ENABLED` | `true`일 때만 Gmail Push inbox dispatcher와 watch/repair scheduler 활성화 |
+| `GMAIL_PUBSUB_TOPIC` | `users.watch`에 등록할 전체 Pub/Sub topic 이름 (`projects/.../topics/...`) |
+| `GMAIL_PUSH_AUDIENCE` | Pub/Sub push OIDC 토큰 검증 audience (webhook의 HTTPS URL) |
+| `GMAIL_PUSH_SERVICE_ACCOUNT_EMAIL` | Pub/Sub push에 허용할 Google service account 이메일 |
 
 ## 성능 및 운영 정책
 
@@ -223,6 +227,10 @@ npm run start:dev
 - 대용량 raw message는 `GMAIL_MAX_RAW_MESSAGE_BYTES` 기준으로 mbox에서 제외해 Render 메모리 초과 위험을 줄입니다.
 - Render production 실행은 `NODE_OPTIONS=--max-old-space-size=400`으로 Node old-space 상한을 명시합니다.
 - 현재 배포 구조는 단일 Render Web Service 기준입니다. 장기 확장 시 Gmail 수집/AI 분석은 queue/worker로 분리할 계획입니다.
+- Gmail Push webhook은 OIDC 검증 후 Pub/Sub 메시지를 durable inbox에 저장하는 일만 하고 204로 응답합니다. Gmail 조회와 AI 처리는 webhook 요청 안에서 실행하지 않습니다.
+- Push·보정 polling·수동 새로고침은 같은 durable sync job을 사용합니다. 수동 요청은 계정별 30초 동안 중복 제거됩니다.
+- `historyId`와 `lastSyncedAt`은 AI/도메인 결과 저장까지 성공한 transaction에서만 전진합니다. `users.watch`가 반환한 기준점은 `watchHistoryId`에 별도로 보관합니다.
+- scheduler와 외부 Gmail 호출 경로는 `GMAIL_PUSH_ENABLED=true`일 때만 활성화됩니다. migration과 GCP Pub/Sub/IAM 설정을 마친 뒤 켜야 합니다.
 
 ## AI 결과 가공 정책
 
