@@ -152,8 +152,8 @@ function buildActionStepDto(
     selectable,
     iconEmoji: stepTypeToEmoji(resolvedType),
     externalCard: card,
-    externalUrl: card?.url ?? item.externalUrl ?? null,
-    officialUrl: card?.url ?? item.externalUrl ?? null,
+    externalUrl: card?.url ?? null,
+    officialUrl: card?.url ?? null,
   };
 }
 
