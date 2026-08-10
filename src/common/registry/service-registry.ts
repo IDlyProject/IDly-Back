@@ -430,6 +430,308 @@ export const SERVICE_REGISTRY: ServiceRegistryItem[] = [
     domain: 'clipstudio.net',
     officialUrl: 'https://www.clipstudio.net',
   },
+
+  // ── KR streaming / music ───────────────────────────────────────────────
+  {
+    serviceName: '티빙',
+    aliases: ['티빙', 'tving', 'cj ent', 'cjenm'],
+    domain: 'tving.com',
+    officialUrl: 'https://www.tving.com',
+  },
+  {
+    serviceName: '웨이브',
+    aliases: ['웨이브', 'wavve', 'wavve.com'],
+    domain: 'wavve.com',
+    officialUrl: 'https://www.wavve.com',
+    securityUrl: 'https://www.wavve.com/member/mypage',
+  },
+  {
+    serviceName: '왓챠',
+    aliases: ['왓챠', 'watcha', 'watchaplay'],
+    domain: 'watcha.com',
+    officialUrl: 'https://watcha.com',
+    securityUrl: 'https://watcha.com/settings/account',
+  },
+  {
+    serviceName: '멜론',
+    aliases: ['멜론', 'melon', 'melon music'],
+    domain: 'melon.com',
+    officialUrl: 'https://www.melon.com',
+  },
+  {
+    serviceName: '지니뮤직',
+    aliases: ['지니', '지니뮤직', 'genie', 'genie music', 'genie.co.kr'],
+    domain: 'genie.co.kr',
+    officialUrl: 'https://genie.co.kr',
+    securityUrl: 'https://genie.co.kr/mypage',
+  },
+  {
+    serviceName: '벅스',
+    aliases: ['벅스', 'bugs', 'bugs music', 'bugs.co.kr'],
+    domain: 'bugs.co.kr',
+    officialUrl: 'https://www.bugs.co.kr',
+  },
+
+  // ── KR food delivery ──────────────────────────────────────────────────
+  {
+    serviceName: '배달의민족',
+    aliases: ['배달의민족', '배민', 'baemin', 'woowa'],
+    domain: 'baemin.com',
+    officialUrl: 'https://www.baemin.com',
+  },
+  {
+    serviceName: '요기요',
+    aliases: ['요기요', 'yogiyo'],
+    domain: 'yogiyo.co.kr',
+    officialUrl: 'https://www.yogiyo.co.kr',
+  },
+
+  // ── KR shopping ───────────────────────────────────────────────────────
+  {
+    serviceName: 'SSG.COM',
+    aliases: ['ssg', 'ssg.com', '신세계몰', '이마트몰', 'shinsegae'],
+    domain: 'ssg.com',
+    officialUrl: 'https://www.ssg.com',
+  },
+  {
+    serviceName: '옥션',
+    aliases: ['옥션', 'auction', 'auction.co.kr'],
+    domain: 'auction.co.kr',
+    officialUrl: 'https://www.auction.co.kr',
+  },
+  {
+    serviceName: '무신사',
+    aliases: ['무신사', 'musinsa'],
+    domain: 'musinsa.com',
+    officialUrl: 'https://www.musinsa.com',
+    securityUrl: 'https://www.musinsa.com/member/mypage',
+  },
+  {
+    serviceName: '마켓컬리',
+    aliases: ['마켓컬리', '컬리', 'kurly', 'marketkurly'],
+    domain: 'kurly.com',
+    officialUrl: 'https://www.kurly.com',
+  },
+  {
+    serviceName: '번개장터',
+    aliases: ['번개장터', '번장', 'bunjang'],
+    domain: 'bunjang.co.kr',
+    officialUrl: 'https://www.bunjang.co.kr',
+  },
+
+  // ── KR education ──────────────────────────────────────────────────────
+  {
+    serviceName: '클래스101',
+    aliases: ['클래스101', 'class101', '클래스 101'],
+    domain: 'class101.net',
+    officialUrl: 'https://class101.net',
+  },
+  {
+    serviceName: '패스트캠퍼스',
+    aliases: ['패스트캠퍼스', 'fastcampus', '패스트 캠퍼스'],
+    domain: 'fastcampus.co.kr',
+    officialUrl: 'https://fastcampus.co.kr',
+  },
+  {
+    serviceName: '탈잉',
+    aliases: ['탈잉', 'taling'],
+    domain: 'taling.me',
+    officialUrl: 'https://taling.me',
+  },
+  {
+    serviceName: '제로베이스',
+    aliases: ['제로베이스', 'zerobase', 'zero-base', 'zero base'],
+    domain: 'zero-base.co.kr',
+    officialUrl: 'https://zero-base.co.kr',
+  },
+  {
+    serviceName: 'Udemy',
+    aliases: ['udemy', '유데미'],
+    domain: 'udemy.com',
+    officialUrl: 'https://www.udemy.com',
+  },
+
+  // ── KR jobs ───────────────────────────────────────────────────────────
+  {
+    serviceName: '잡코리아',
+    aliases: ['잡코리아', 'jobkorea', 'job korea'],
+    domain: 'jobkorea.co.kr',
+    officialUrl: 'https://www.jobkorea.co.kr',
+  },
+  {
+    serviceName: '원티드',
+    aliases: ['원티드', 'wanted', 'wantedlab'],
+    domain: 'wanted.co.kr',
+    officialUrl: 'https://www.wanted.co.kr',
+  },
+
+  // ── Global social ─────────────────────────────────────────────────────
+  {
+    serviceName: 'TikTok',
+    aliases: ['tiktok', '틱톡', 'bytedance'],
+    domain: 'tiktok.com',
+    officialUrl: 'https://www.tiktok.com',
+    securityUrl: 'https://www.tiktok.com/settings',
+  },
+  {
+    serviceName: 'Pinterest',
+    aliases: ['pinterest', '핀터레스트'],
+    domain: 'pinterest.com',
+    officialUrl: 'https://www.pinterest.com',
+    securityUrl: 'https://www.pinterest.com/settings/security',
+  },
+  {
+    serviceName: 'Telegram',
+    aliases: ['telegram', '텔레그램'],
+    domain: 'telegram.org',
+    officialUrl: 'https://web.telegram.org',
+  },
+  {
+    serviceName: 'WhatsApp',
+    aliases: ['whatsapp', '왓츠앱', 'whats app'],
+    domain: 'whatsapp.com',
+    officialUrl: 'https://www.whatsapp.com',
+  },
+  {
+    serviceName: 'Snapchat',
+    aliases: ['snapchat', '스냅챗'],
+    domain: 'snapchat.com',
+    officialUrl: 'https://accounts.snapchat.com',
+  },
+
+  // ── Gaming ────────────────────────────────────────────────────────────
+  {
+    serviceName: 'Nintendo',
+    aliases: ['nintendo', '닌텐도', 'nintendo switch', '닌텐도 스위치', 'nintendo account'],
+    domain: 'nintendo.com',
+    officialUrl: 'https://accounts.nintendo.com',
+    securityUrl: 'https://accounts.nintendo.com/profile/edit',
+  },
+  {
+    serviceName: 'PlayStation',
+    aliases: ['playstation', '플스', 'psn', 'ps4', 'ps5', 'sony', 'play station'],
+    domain: 'playstation.com',
+    officialUrl: 'https://www.playstation.com',
+  },
+  {
+    serviceName: 'Epic Games',
+    aliases: ['epic games', 'epicgames', 'epic', 'fortnite', '에픽게임즈', '포트나이트'],
+    domain: 'epicgames.com',
+    officialUrl: 'https://www.epicgames.com/id/',
+  },
+  {
+    serviceName: 'Riot Games',
+    aliases: ['riot', 'riot games', '라이엇', '라이엇게임즈', 'league of legends', '리그오브레전드', 'lol', 'valorant', '발로란트'],
+    domain: 'riotgames.com',
+    officialUrl: 'https://account.riotgames.com',
+    securityUrl: 'https://account.riotgames.com',
+  },
+  {
+    serviceName: 'Battle.net',
+    aliases: ['battle.net', 'battlenet', 'blizzard', '블리자드', 'overwatch', '오버워치', 'wow', 'world of warcraft', 'starcraft', '스타크래프트', 'hearthstone'],
+    domain: 'battle.net',
+    officialUrl: 'https://account.blizzard.com',
+    securityUrl: 'https://account.blizzard.com',
+  },
+  {
+    serviceName: 'EA',
+    aliases: ['ea', 'electronic arts', 'ea games', 'origin', 'ea app', 'fifa', 'apex legends', 'apex', 'the sims', '이에이'],
+    domain: 'ea.com',
+    officialUrl: 'https://www.ea.com',
+  },
+
+  // ── Dev / cloud ───────────────────────────────────────────────────────
+  {
+    serviceName: 'GitLab',
+    aliases: ['gitlab', '깃랩', 'git lab'],
+    domain: 'gitlab.com',
+    officialUrl: 'https://gitlab.com',
+    securityUrl: 'https://gitlab.com/-/user_settings/profile',
+  },
+  {
+    serviceName: 'Cloudflare',
+    aliases: ['cloudflare', '클라우드플레어'],
+    domain: 'cloudflare.com',
+    officialUrl: 'https://dash.cloudflare.com',
+    securityUrl: 'https://dash.cloudflare.com/profile',
+  },
+  {
+    serviceName: 'Netlify',
+    aliases: ['netlify', '넷리파이'],
+    domain: 'netlify.com',
+    officialUrl: 'https://app.netlify.com',
+    securityUrl: 'https://app.netlify.com/user/settings',
+  },
+  {
+    serviceName: 'DigitalOcean',
+    aliases: ['digitalocean', 'digital ocean', '디지털오션'],
+    domain: 'digitalocean.com',
+    officialUrl: 'https://cloud.digitalocean.com',
+    securityUrl: 'https://cloud.digitalocean.com/account',
+  },
+  {
+    serviceName: 'Heroku',
+    aliases: ['heroku', '헤로쿠'],
+    domain: 'heroku.com',
+    officialUrl: 'https://dashboard.heroku.com',
+  },
+  {
+    serviceName: 'Atlassian',
+    aliases: ['atlassian', 'jira', '지라', 'confluence', '컨플루언스', 'trello', '트렐로', 'bitbucket'],
+    domain: 'atlassian.com',
+    officialUrl: 'https://id.atlassian.com',
+    securityUrl: 'https://id.atlassian.com/manage-profile/security',
+  },
+  {
+    serviceName: 'AWS',
+    aliases: ['aws', 'amazon web services', 'amazon aws', 'ec2', 's3', 'lambda'],
+    domain: 'aws.amazon.com',
+    officialUrl: 'https://aws.amazon.com',
+  },
+
+  // ── Travel ────────────────────────────────────────────────────────────
+  {
+    serviceName: 'Airbnb',
+    aliases: ['airbnb', '에어비앤비', 'air bnb'],
+    domain: 'airbnb.com',
+    officialUrl: 'https://www.airbnb.com',
+    securityUrl: 'https://www.airbnb.com/account-settings',
+  },
+  {
+    serviceName: 'Booking.com',
+    aliases: ['booking.com', 'booking', '부킹닷컴'],
+    domain: 'booking.com',
+    officialUrl: 'https://www.booking.com',
+    securityUrl: 'https://account.booking.com',
+  },
+  {
+    serviceName: 'Agoda',
+    aliases: ['agoda', '아고다'],
+    domain: 'agoda.com',
+    officialUrl: 'https://www.agoda.com',
+  },
+
+  // ── Finance ───────────────────────────────────────────────────────────
+  {
+    serviceName: 'Stripe',
+    aliases: ['stripe', '스트라이프'],
+    domain: 'stripe.com',
+    officialUrl: 'https://dashboard.stripe.com',
+    securityUrl: 'https://dashboard.stripe.com/settings/user',
+  },
+  {
+    serviceName: 'Wise',
+    aliases: ['wise', 'transferwise', '트랜스퍼와이즈', '와이즈'],
+    domain: 'wise.com',
+    officialUrl: 'https://wise.com',
+  },
+  {
+    serviceName: 'Coinbase',
+    aliases: ['coinbase', '코인베이스'],
+    domain: 'coinbase.com',
+    officialUrl: 'https://www.coinbase.com',
+    securityUrl: 'https://www.coinbase.com/settings/security',
+  },
 ];
 
 
