@@ -122,8 +122,6 @@ export class SecurityChatService {
   async startNewSession(userId: string): Promise<{ hasHistory: boolean }> {
     const now = new Date();
 
-    const existing = await this.prisma.securityChat.findUnique({ where: { userId } });
-
     const chat = await this.prisma.securityChat.upsert({
       where: { userId },
       create: { userId, currentSessionStartedAt: now },
@@ -135,9 +133,9 @@ export class SecurityChatService {
       data: { chatId: chat.id, startedAt: now },
     });
 
-    // hasHistory: 이전 세션 레코드 중 실제 메시지가 있는 것이 있을 때만 true
-    const hasHistoryFinal = await this.prisma.securityChatSession.count({
-      where: { chatId: chat.id, startedAt: { lt: now } },
+    // 빈 세션 레코드가 여러 개 생겨도 실제 이전 메시지가 없으면 false다.
+    const hasHistoryFinal = await this.prisma.securityChatMessage.count({
+      where: { chatId: chat.id, createdAt: { lt: now } },
     }) > 0;
 
     return { hasHistory: hasHistoryFinal };
@@ -372,9 +370,6 @@ export class SecurityChatService {
 
     // 5. exit_cta
     if (signal.showExitCta) {
-      const hasMoreAction = allSa.some(
-        (s) => s.status === 'action_required' && s.actionItems.some((a) => a.status === 'pending' || a.status === 'failed'),
-      );
       assistantMsgs.push({
         role: 'assistant',
         type: 'exit_cta',
@@ -382,8 +377,6 @@ export class SecurityChatService {
         metadata: {
           exitCtas: [
             { id: 'home', label: '홈으로 돌아가기', style: 'home', enabled: true, href: '/home' },
-            ...(hasMoreAction ? [{ id: 'next_account', label: '다음 계정 보안 조치 하기', style: 'next_account', enabled: true, href: '/home' }] : []),
-            { id: 'report', label: '보안 리포트 보러 가기', style: 'report', enabled: true, href: '/report' },
           ],
         },
       });

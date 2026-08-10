@@ -9,7 +9,6 @@ import { BetaModule } from './beta/beta.module';
 import { HomeModule } from './home/home.module';
 import { RisksModule } from './risks/risks.module';
 import { SummaryModule } from './summary/summary.module';
-import { ReportModule } from './report/report.module';
 import { SecurityChatModule } from './security-chat/security-chat.module';
 import { HealthController } from './health.controller';
 
@@ -25,7 +24,6 @@ import { HealthController } from './health.controller';
     HomeModule,
     RisksModule,
     SummaryModule,
-    ReportModule,
     SecurityChatModule,
   ],
   controllers: [HealthController],

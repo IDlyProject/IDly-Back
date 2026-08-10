@@ -168,9 +168,9 @@ function buildMessageDto(msg: DbMessage) {
 }
 
 function calcProgress(items: DbActionItem[]) {
-  const required = items.filter((i) => i.isRequired);
-  const doneCount = required.filter((i) => i.status === 'done').length;
-  const totalRequired = required.length;
+  const doneCount = items.filter((i) => i.status === 'done').length;
+  // 응답 필드명은 하위 호환을 위해 유지하지만, 진행률은 화면에 노출된 전체 조치 기준이다.
+  const totalRequired = items.length;
   let label: string | null = null;
   if (totalRequired > 0) {
     label = doneCount >= totalRequired ? '모두 완료' : `${doneCount}/${totalRequired} 완료`;
@@ -243,10 +243,10 @@ export class ActionAssistantService {
     if (!completedSession) return null;
 
     const items = await this.loadItems(serviceAccountId);
-    const hasOpenRequiredAction = items.some(
-      (i) => i.isRequired && (i.status === 'pending' || i.status === 'failed'),
+    const hasOpenAction = items.some(
+      (i) => i.status === 'pending' || i.status === 'failed',
     );
-    if (['action_required', 'watch'].includes(sa.status) && hasOpenRequiredAction) {
+    if (hasOpenAction) {
       return null;
     }
 
@@ -265,9 +265,13 @@ export class ActionAssistantService {
     bootstrapFirstAction = false,
   ) {
     const sa = await this.assertOwnership(serviceAccountId, userId);
+    const existingItems = await this.loadItems(serviceAccountId);
+    const hasOpenAction = existingItems.some(
+      (item) => item.status === 'pending' || item.status === 'failed',
+    );
 
-    // action_required/watch 상태가 아니면 세션 생성 불가 (resolved/skipped/safe)
-    if (!['action_required', 'watch'].includes(sa.status)) {
+    // 과거 필수 조치 기준으로 resolved된 계정도 미완료 조치가 있으면 이어서 진행한다.
+    if (!['action_required', 'watch'].includes(sa.status) && !hasOpenAction) {
       // 가장 최근 completed 세션이 있으면 readOnly로 반환
       const lastCompleted = await this.prisma.actionSession.findFirst({
         where: { serviceAccountId, status: 'completed' },
@@ -282,6 +286,13 @@ export class ActionAssistantService {
         );
       }
       throw new BadRequestException('보안 조치가 필요하지 않은 계정입니다.');
+    }
+
+    if (!['action_required', 'watch'].includes(sa.status) && hasOpenAction) {
+      await this.prisma.serviceAccount.update({
+        where: { id: serviceAccountId },
+        data: { status: 'action_required', resolvedAt: null },
+      });
     }
 
     // 기존 active 있으면 idempotent 반환
@@ -300,7 +311,7 @@ export class ActionAssistantService {
     const registry = resolveService(sa.serviceName);
     const displayName = sa.displayName ?? cleanServiceName(sa.serviceName);
 
-    const firstRequired = items.find((i) => i.isRequired && (i.status === 'pending' || i.status === 'failed'));
+    const firstOpenItem = items.find((i) => i.status === 'pending' || i.status === 'failed');
 
     // 메시지 빌드
     const messages: { role: string; type: string; content: string; metadata?: ActionMessageMeta }[] = [];
@@ -321,10 +332,10 @@ export class ActionAssistantService {
       metadata: { actionList: { title: '추천 조치 사항', actionIds: items.map((i) => i.id) } },
     });
 
-    // 3. bootstrap: 첫 required 조치 자동 선택 — user_chip + 조치 메시지 시퀀스
-    if (bootstrapFirstAction && firstRequired) {
-      messages.push({ role: 'user', type: 'user_chip', content: firstRequired.title });
-      this.appendActionMessages(messages, firstRequired, displayName, registry, items, sa.primaryRiskType);
+    // 3. bootstrap: 첫 미완료 조치 자동 선택 — user_chip + 조치 메시지 시퀀스
+    if (bootstrapFirstAction && firstOpenItem) {
+      messages.push({ role: 'user', type: 'user_chip', content: firstOpenItem.title });
+      this.appendActionMessages(messages, firstOpenItem, displayName, registry, items, sa.primaryRiskType);
     } else {
       // 자동 선택 없는 경우 — Figma 설계: 조치 선택 유도 텍스트
       messages.push({ role: 'assistant', type: 'text', content: '이 조치들 중 하나부터 시작해 보세요.' });
@@ -337,8 +348,8 @@ export class ActionAssistantService {
         data: {
           serviceAccountId,
           status: 'active',
-          activeActionItemId: firstRequired?.id ?? null,
-          feedbackEnabled: bootstrapFirstAction && !!firstRequired,
+          activeActionItemId: firstOpenItem?.id ?? null,
+          feedbackEnabled: bootstrapFirstAction && !!firstOpenItem,
           composerEnabled: false,
           composerPlaceholder: null,
           messages: {
@@ -445,10 +456,10 @@ export class ActionAssistantService {
         userMessage = buildMessageDto(userMsg);
 
         const updatedItems = items.map((i) => i.id === item.id ? { ...i, status: 'done' } : i);
-        const remainRequired = updatedItems.filter((i) => i.isRequired && i.status !== 'done');
+        const remainingItems = updatedItems.filter((i) => i.status !== 'done');
         const progress = calcProgress(updatedItems);
 
-        if (remainRequired.length === 0) {
+        if (remainingItems.length === 0) {
           // 전체 완료 — 트랜잭션으로 묶음
           await this.prisma.$transaction([
             this.prisma.actionItem.update({ where: { id: item.id }, data: { status: 'done' } }),
@@ -462,11 +473,10 @@ export class ActionAssistantService {
             role: 'assistant',
             type: 'action_list',
             content: '모든 조치 완료',
-            metadata: { actionList: { title: '모든 조치 완료', actionIds: updatedItems.filter((i) => i.isRequired).map((i) => i.id) } },
+            metadata: { actionList: { title: '모든 조치 완료', actionIds: updatedItems.map((i) => i.id) } },
           });
 
           // celebration
-          const nextSa = await this.findNextActionRequired(userId, serviceAccountId);
           assistantMsgs.push({
             role: 'assistant',
             type: 'celebration',
@@ -475,10 +485,24 @@ export class ActionAssistantService {
               celebration: {
                 emoji: '🎉',
                 title: `${displayName} 계정이 안전해졌어요!`,
-                subtitle: `${updatedItems.filter((i) => i.isRequired).length}가지 보안 조치를 모두 마쳤어요. 비정상적인 접근이 생기면 바로 알려드릴게요.`,
+                subtitle: `${updatedItems.length}가지 보안 조치를 모두 마쳤어요. 비정상적인 접근이 생기면 바로 알려드릴게요.`,
               },
             },
           });
+
+          // 카드뉴스는 개별 조치 도중 끼워 넣지 않고, 모든 필수 조치를
+          // 완료한 뒤 계정에 맞는 콘텐츠를 한 번만 노출한다.
+          const completionCardNews = updatedItems
+            .map((actionItem) => matchKbEntry(sa.primaryRiskType, actionItem)?.cardNews)
+            .find((cardNews) => cardNews != null);
+          if (completionCardNews) {
+            assistantMsgs.push({
+              role: 'assistant',
+              type: 'card_news',
+              content: completionCardNews.title,
+              metadata: { cardNews: completionCardNews },
+            });
+          }
 
           // exit CTA
           assistantMsgs.push({
@@ -488,7 +512,13 @@ export class ActionAssistantService {
             metadata: {
               exitCtas: [
                 { id: 'home', label: '홈으로 돌아가기', style: 'home', enabled: true, href: '/home' },
-                { id: 'report', label: '보안 리포트 보러 가기', style: 'report', enabled: true, href: '/report' },
+                {
+                  id: 'account_report',
+                  label: '계정 리포트 보러 가기',
+                  style: 'account',
+                  enabled: true,
+                  href: `/account/${serviceAccountId}`,
+                },
               ],
             },
           });
@@ -509,7 +539,7 @@ export class ActionAssistantService {
           ]);
 
           const progressText = progress.label ? `완료! ${progress.label}` : '완료!';
-          const remainCount = remainRequired.length;
+          const remainCount = remainingItems.length;
           assistantMsgs.push({
             role: 'assistant',
             type: 'text',
@@ -520,7 +550,7 @@ export class ActionAssistantService {
             type: 'action_list',
             content: '남은 조치 사항',
             // dynamic.html makeRemainingList: 전체(완료 포함) 렌더, done은 회색 체크로 표시
-            metadata: { actionList: { title: '남은 조치 사항', actionIds: updatedItems.filter((i) => i.isRequired).map((i) => i.id) } },
+            metadata: { actionList: { title: '남은 조치 사항', actionIds: updatedItems.map((i) => i.id) } },
           });
 
           sessionPatch = { activeActionItemId: null, feedbackEnabled: false, composerEnabled: false, composerPlaceholder: null };
@@ -632,14 +662,12 @@ export class ActionAssistantService {
     // completion 블록
     let completion: object | null = null;
     if (updatedSession.status === 'completed') {
-      const nextSa = await this.findNextActionRequired(userId, serviceAccountId);
       completion = {
         celebration: {
           emoji: '🎉',
           title: `${displayName} 계정이 안전해졌어요!`,
-          subtitle: `${finalItems.filter((i) => i.isRequired).length}가지 보안 조치를 모두 마쳤어요.`,
+          subtitle: `${finalItems.length}가지 보안 조치를 모두 마쳤어요.`,
         },
-        nextServiceAccountId: nextSa,
       };
     }
 
@@ -693,18 +721,8 @@ export class ActionAssistantService {
       });
     }
 
-    // card_news
-    if (kbForItem?.cardNews) {
-      messages.push({
-        role: 'assistant',
-        type: 'card_news',
-        content: kbForItem.cardNews.title,
-        metadata: { cardNews: kbForItem.cardNews },
-      });
-    }
-
     // tip
-    const tipText = kbForItem?.tip ?? (items.filter((i) => i.isRequired && i.status !== 'done').length <= 1
+    const tipText = kbForItem?.tip ?? (items.filter((i) => i.status !== 'done').length <= 1
       ? '완료하면 모든 보안 조치가 끝나요!'
       : '변경 완료 후 다시 돌아오시면, 나머지 조치도 도와드릴게요!');
     messages.push({ role: 'assistant', type: 'tip', content: tipText });
@@ -742,19 +760,12 @@ export class ActionAssistantService {
       && progress.totalRequired > 0
       && progress.doneCount >= progress.totalRequired
     ) {
-      const gmailUserId = sa.gmailAccount?.userId;
-      if (!gmailUserId) throw new Error('gmailAccount 관계 로드 실패 — serviceAccount에 gmailAccount가 없습니다.');
-      const nextSa = await this.findNextActionRequired(
-        gmailUserId,
-        sa.id,
-      );
       completion = {
         celebration: {
           emoji: '🎉',
           title: `${displayName} 계정이 안전해졌어요!`,
-          subtitle: `${items.filter((i) => i.isRequired).length}가지 보안 조치를 모두 마쳤어요.`,
+          subtitle: `${items.length}가지 보안 조치를 모두 마쳤어요.`,
         },
-        nextServiceAccountId: nextSa,
       };
     }
 
@@ -882,19 +893,6 @@ export class ActionAssistantService {
       where: { userId, status: 'completed' },
       data: { reportSnapshot: { status: 'invalidated' } as unknown as Prisma.InputJsonValue },
     });
-  }
-
-  private async findNextActionRequired(userId: string, excludeSaId: string): Promise<string | null> {
-    const next = await this.prisma.serviceAccount.findFirst({
-      where: {
-        id: { not: excludeSaId },
-        status: 'action_required',
-        gmailAccount: { userId },
-        actionItems: { some: { isRequired: true, status: { in: ['pending', 'failed'] } } },
-      },
-      orderBy: { createdAt: 'asc' },
-    });
-    return next?.id ?? null;
   }
 
   private async callSolarChat(

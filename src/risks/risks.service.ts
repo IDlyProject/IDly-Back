@@ -46,8 +46,10 @@ export class RisksService {
     }));
 
     const pendingItems = sa.actionItems.filter(
-      (a) => a.isRequired && (a.status === 'pending' || a.status === 'failed'),
+      (a) => a.status === 'pending' || a.status === 'failed',
     );
+    const requiredItems = sa.actionItems.filter((a) => a.isRequired);
+    const completedRequiredCount = requiredItems.filter((a) => a.status === 'done').length;
     const firstPending = pendingItems[0] ?? null;
     const activeSessionId = sa.actionSessions[0]?.id ?? null;
 
@@ -75,6 +77,16 @@ export class RisksService {
       headline: sa.headline,
       summary: sa.summary,
       interpretation: sa.interpretation,
+      analyzedAt: sa.lastAnalyzedAt?.toISOString() ?? null,
+      accountSummary: {
+        actionCount: sa.actionItems.length,
+        completedActionCount: sa.actionItems.filter((a) => a.status === 'done').length,
+        remainingActionCount: sa.actionItems.filter((a) => a.status !== 'done').length,
+        requiredActionCount: requiredItems.length,
+        completedRequiredActionCount: completedRequiredCount,
+        remainingRequiredActionCount: Math.max(0, requiredItems.length - completedRequiredCount),
+        evidenceCount: sa.riskEvidences.length,
+      },
       activeSessionId,
       cardNews,
       primaryCta: firstPending
