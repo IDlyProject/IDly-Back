@@ -9,6 +9,8 @@ import { BetaModule } from './beta/beta.module';
 import { HomeModule } from './home/home.module';
 import { RisksModule } from './risks/risks.module';
 import { SummaryModule } from './summary/summary.module';
+// 보안 리포트 기능은 현재 비활성화 상태이며, 재사용을 위해 구현 파일은 보존한다.
+// import { ReportModule } from './report/report.module';
 import { SecurityChatModule } from './security-chat/security-chat.module';
 import { HealthController } from './health.controller';
 
@@ -24,6 +26,7 @@ import { HealthController } from './health.controller';
     HomeModule,
     RisksModule,
     SummaryModule,
+    // ReportModule,
     SecurityChatModule,
   ],
   controllers: [HealthController],
