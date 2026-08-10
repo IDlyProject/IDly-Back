@@ -119,20 +119,61 @@ export class SecurityChatService {
     private readonly config: ConfigService,
   ) {}
 
+  async startNewSession(userId: string): Promise<{ hasHistory: boolean }> {
+    const now = new Date();
+
+    // 현재 세션에 메시지가 있는지 확인 (= 이전 대화 존재 여부)
+    const existing = await this.prisma.securityChat.findUnique({ where: { userId } });
+    let hasHistory = false;
+    if (existing) {
+      const count = await this.prisma.securityChatMessage.count({
+        where: { chatId: existing.id },
+      });
+      hasHistory = count > 0;
+    }
+
+    await this.prisma.securityChat.upsert({
+      where: { userId },
+      create: { userId, currentSessionStartedAt: now },
+      update: { currentSessionStartedAt: now },
+    });
+
+    return { hasHistory };
+  }
+
   async getOrCreateChat(userId: string) {
     const chat = await this.prisma.securityChat.upsert({
       where: { userId },
       create: { userId },
       update: {},
-      include: {
-        messages: {
-          orderBy: { createdAt: 'desc' }, // 최신 50개 가져온 뒤 역순으로 반환
-          take: 50,
-        },
-      },
     });
 
-    return this.buildChatResponse(chat.id, [...chat.messages].reverse());
+    const messages = await this.prisma.securityChatMessage.findMany({
+      where: {
+        chatId: chat.id,
+        createdAt: { gte: chat.currentSessionStartedAt },
+      },
+      orderBy: { createdAt: 'asc' },
+      take: 50,
+    });
+
+    return this.buildChatResponse(chat.id, messages);
+  }
+
+  async getHistory(userId: string) {
+    const chat = await this.prisma.securityChat.findUnique({ where: { userId } });
+    if (!chat) return { messages: [] };
+
+    const messages = await this.prisma.securityChatMessage.findMany({
+      where: {
+        chatId: chat.id,
+        createdAt: { lt: chat.currentSessionStartedAt },
+      },
+      orderBy: { createdAt: 'asc' },
+      take: 200,
+    });
+
+    return this.buildChatResponse(chat.id, messages);
   }
 
   async sendMessage(userId: string, message: string) {
@@ -142,9 +183,12 @@ export class SecurityChatService {
       update: {},
     });
 
-    // 최근 대화 히스토리 먼저 조회 (유저 메시지 저장 전 — 중복 방지)
+    // 현재 세션 메시지만 LLM 컨텍스트에 사용 (세션 간 기억 없음)
     const recentHistory = await this.prisma.securityChatMessage.findMany({
-      where: { chatId: chat.id },
+      where: {
+        chatId: chat.id,
+        createdAt: { gte: chat.currentSessionStartedAt },
+      },
       orderBy: { createdAt: 'desc' },
       take: this.HISTORY_LIMIT,
     });

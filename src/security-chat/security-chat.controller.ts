@@ -40,14 +40,29 @@ class SendSecurityChatDto {
 export class SecurityChatController {
   constructor(private readonly securityChatService: SecurityChatService) {}
 
+  @Post('sessions')
+  @HttpCode(200)
+  @RateLimit({ limit: 30, windowMs: 60_000, key: 'user' })
+  @ApiOperation({ summary: '새 채팅 세션 시작 — 진입 시 호출' })
+  @ApiResponse({ status: 200, description: '{ hasHistory: boolean }' })
+  startSession(@Req() req) {
+    return this.securityChatService.startNewSession(req.user.sub);
+  }
+
   @Get()
   @RateLimit({ limit: 60, windowMs: 60_000, key: 'user' })
-  @ApiOperation({
-    summary: '보안 도우미 채팅 조회 — 2-4 히스토리 복원',
-  })
-  @ApiResponse({ status: 200, description: '채팅 히스토리' })
+  @ApiOperation({ summary: '현재 세션 채팅 조회' })
+  @ApiResponse({ status: 200, description: '현재 세션 메시지' })
   getChat(@Req() req) {
     return this.securityChatService.getOrCreateChat(req.user.sub);
+  }
+
+  @Get('history')
+  @RateLimit({ limit: 30, windowMs: 60_000, key: 'user' })
+  @ApiOperation({ summary: '이전 세션 채팅 히스토리 조회' })
+  @ApiResponse({ status: 200, description: '현재 세션 이전의 모든 메시지' })
+  getHistory(@Req() req) {
+    return this.securityChatService.getHistory(req.user.sub);
   }
 
   @Post('messages')
