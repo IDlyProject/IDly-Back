@@ -589,7 +589,7 @@ export class ActionAssistantService {
             hasOfficialUrl: !!linkProbe?.url,
           })
         : (item.description ??
-          `${displayName} 공식 사이트 설정·보안 메뉴에서 「${item.title}」을(를) 찾아 다시 시도해 보세요.`);
+          `${(registry?.officialUrl || registry?.passwordUrl || registry?.securityUrl) ? displayName : '해당 서비스'} 공식 사이트 설정·보안 메뉴에서 「${item.title}」을(를) 찾아 다시 시도해 보세요.`);
       assistantMsgs.push({ role: 'assistant', type: 'text', content: helpText });
 
       // URL 재제시 + tip + feedback
@@ -683,10 +683,13 @@ export class ActionAssistantService {
         metadata: { externalCard: card },
       });
     } else {
+      // 알려진 공식 URL이 없는 서비스(개인 계정 레이블, registry 미등록 등)는 중립 레이블 사용
+      const hasKnownUrl = !!(registry?.officialUrl || registry?.passwordUrl || registry?.securityUrl);
+      const safeLabel = hasKnownUrl ? displayName : '해당 서비스';
       messages.push({
         role: 'assistant',
         type: 'text',
-        content: noOfficialLinkGuidance(displayName, item.title),
+        content: noOfficialLinkGuidance(safeLabel, item.title),
       });
     }
 
