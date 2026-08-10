@@ -276,7 +276,27 @@ export class SecurityChatService {
       }
     }
 
-    // 4. exit_cta
+    // 4. 사후 대응 상황 — 앱인토스 링크 (규칙 기반, LLM 판단 아님)
+    if (detectPostBreachIntent(message)) {
+      assistantMsgs.push({
+        role: 'assistant',
+        type: 'official_link',
+        content: '계정 침해 사후 대응은 IDly 앱인토스에서 더 상세한 도움을 받을 수 있어요.',
+        metadata: {
+          externalCard: {
+            label: 'IDly 앱인토스',
+            title: '계정 침해 사후 대응 가이드',
+            subtitle: '도용된 계정 복구 · 피해 최소화 단계별 안내',
+            url: 'https://minion.toss.im/1IqBCEit',
+            domain: 'minion.toss.im/1IqBCEit',
+            trustLabel: 'IDly 확인 링크',
+            ctaLabel: '앱인토스 열기',
+          },
+        },
+      });
+    }
+
+    // 5. exit_cta
     if (signal.showExitCta) {
       const hasMoreAction = allSa.some(
         (s) => s.status === 'action_required' && s.actionItems.some((a) => a.status === 'pending' || a.status === 'failed'),
@@ -392,7 +412,7 @@ ${saList || '분석된 계정이 없습니다.'}
   "showExitCta": true 또는 false
 }
 showActionList: 조치 목록을 보여주면 도움이 될 때 true.
-showLink: 특정 서비스의 공식 페이지 링크가 필요할 때 true.
+showLink: 사용자가 언급한 서비스(우리 시스템에 없어도)의 공식 페이지 링크가 도움될 때 true. 비밀번호 변경·보안 설정 질문에는 적극적으로 true.
 targetSaRef: 위 현황의 ref. 없으면 null. (구버전 targetSaId 필드 사용 금지)
 actionType: change_password, enable_2fa, logout_sessions, verify_activity, review_apps 등.
 showExitCta: 대화를 마무리하거나 다른 페이지로 안내할 때 true.`;
@@ -627,6 +647,23 @@ showExitCta: 대화를 마무리하거나 다른 페이지로 안내할 때 true
       messages: messages.map(buildMsgDto),
     };
   }
+}
+
+const POST_BREACH_PATTERNS = [
+  /이미\s*(해킹|침해|도용|털렸|뚫렸)/,
+  /해킹\s*(당했|됐|당한\s*것\s*같)/,
+  /비밀번호[가를이]\s*(바뀌었|변경됐|변경\s*됐|제가\s*바꾼\s*게\s*아닌)/,
+  /누군가[가이]\s*(내|제)\s*계정/,
+  /모르는\s*(기기|사람|곳|ip|접속)/,
+  /개인\s*정보\s*(유출|노출|털렸)/,
+  /(유출|노출|침해)\s*(됐|되었|당했|확인)/,
+  /피싱\s*(당했|에\s*걸렸|링크\s*클릭|을\s*당)/,
+  /내가\s*하지\s*않은\s*(결제|로그인|거래)/,
+  /모르는\s*(결제|거래|이체)/,
+];
+
+function detectPostBreachIntent(message: string): boolean {
+  return POST_BREACH_PATTERNS.some((re) => re.test(message));
 }
 
 function domainFromUrl(url: string | null): string | null {
