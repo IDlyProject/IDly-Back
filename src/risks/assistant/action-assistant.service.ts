@@ -485,7 +485,6 @@ export class ActionAssistantService {
             metadata: {
               exitCtas: [
                 { id: 'home', label: '홈으로 돌아가기', style: 'home', enabled: true, href: '/home' },
-                ...(nextSa ? [{ id: 'next_account', label: '다음 계정 보안 조치 하기', style: 'next_account', enabled: true, href: `/service-accounts/${nextSa}` }] : []),
                 { id: 'report', label: '보안 리포트 보러 가기', style: 'report', enabled: true, href: '/report' },
               ],
             },
@@ -638,11 +637,6 @@ export class ActionAssistantService {
           subtitle: `${finalItems.filter((i) => i.isRequired).length}가지 보안 조치를 모두 마쳤어요.`,
         },
         nextServiceAccountId: nextSa,
-        exitCtas: [
-          { id: 'home', label: '홈으로 돌아가기', style: 'home', enabled: true, href: '/home' },
-          ...(nextSa ? [{ id: 'next_account', label: '다음 계정 보안 조치 하기', style: 'next_account', enabled: true, href: `/service-accounts/${nextSa}` }] : []),
-          { id: 'report', label: '보안 리포트 보러 가기', style: 'report', enabled: true, href: '/report' },
-        ],
       };
     }
 
@@ -755,11 +749,6 @@ export class ActionAssistantService {
           subtitle: `${items.filter((i) => i.isRequired).length}가지 보안 조치를 모두 마쳤어요.`,
         },
         nextServiceAccountId: nextSa,
-        exitCtas: [
-          { id: 'home', label: '홈으로 돌아가기', style: 'home', enabled: true },
-          ...(nextSa ? [{ id: 'next_account', label: '다음 계정 보안 조치 하기', style: 'next_account', enabled: true }] : []),
-          { id: 'report', label: '보안 리포트 보러 가기', style: 'report', enabled: true },
-        ],
       };
     }
 
