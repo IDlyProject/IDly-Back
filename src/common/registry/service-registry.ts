@@ -231,6 +231,128 @@ export const SERVICE_REGISTRY: ServiceRegistryItem[] = [
     securityUrl: 'https://www.twitch.tv/settings/security',
   },
 
+  // ── Design / productivity (global) ────────────────────────────────────
+  {
+    serviceName: 'Figma',
+    aliases: ['figma', '피그마'],
+    domain: 'figma.com',
+    officialUrl: 'https://www.figma.com',
+    passwordUrl: 'https://www.figma.com/settings',
+    securityUrl: 'https://www.figma.com/settings',
+  },
+  {
+    serviceName: 'Canva',
+    aliases: ['canva', '캔바', '캔버'],
+    domain: 'canva.com',
+    officialUrl: 'https://www.canva.com',
+    passwordUrl: 'https://www.canva.com/settings',
+    securityUrl: 'https://www.canva.com/settings',
+  },
+  {
+    serviceName: 'Adobe',
+    aliases: ['adobe', '어도비', 'creative cloud', 'creativecloud', 'photoshop', 'illustrator', 'acrobat'],
+    domain: 'adobe.com',
+    officialUrl: 'https://account.adobe.com',
+    passwordUrl: 'https://account.adobe.com',
+    securityUrl: 'https://account.adobe.com',
+  },
+
+  // ── AI / cloud platforms ───────────────────────────────────────────────
+  {
+    serviceName: 'OpenAI',
+    aliases: ['openai', '오픈ai', 'chatgpt', '챗gpt', 'chat gpt', 'chatgpt plus'],
+    domain: 'openai.com',
+    officialUrl: 'https://platform.openai.com',
+    securityUrl: 'https://platform.openai.com/settings',
+  },
+  {
+    serviceName: 'Anthropic',
+    aliases: ['anthropic', 'claude', 'claude ai', '클로드'],
+    domain: 'anthropic.com',
+    officialUrl: 'https://console.anthropic.com',
+    securityUrl: 'https://console.anthropic.com/settings/keys',
+  },
+
+  // ── Dev platforms ──────────────────────────────────────────────────────
+  {
+    serviceName: 'Vercel',
+    aliases: ['vercel', '버셀'],
+    domain: 'vercel.com',
+    officialUrl: 'https://vercel.com/dashboard',
+    securityUrl: 'https://vercel.com/account/security',
+  },
+  {
+    serviceName: 'Railway',
+    aliases: ['railway', '레일웨이'],
+    domain: 'railway.app',
+    officialUrl: 'https://railway.app',
+    securityUrl: 'https://railway.app/account',
+  },
+  {
+    serviceName: 'Supabase',
+    aliases: ['supabase', '수파베이스'],
+    domain: 'supabase.com',
+    officialUrl: 'https://supabase.com/dashboard',
+    securityUrl: 'https://supabase.com/dashboard/account',
+  },
+  {
+    serviceName: 'JetBrains',
+    aliases: ['jetbrains', '젯브레인', 'intellij', 'pycharm', 'webstorm', 'goland', 'rider'],
+    domain: 'jetbrains.com',
+    officialUrl: 'https://account.jetbrains.com',
+    passwordUrl: 'https://account.jetbrains.com/profile',
+    securityUrl: 'https://account.jetbrains.com/profile',
+  },
+  {
+    serviceName: 'Unity',
+    aliases: ['unity', '유니티', 'unity3d'],
+    domain: 'unity.com',
+    officialUrl: 'https://unity.com',
+    passwordUrl: 'https://id.unity.com/en/account/edit',
+    securityUrl: 'https://id.unity.com/en/account/edit',
+  },
+
+  // ── Education ──────────────────────────────────────────────────────────
+  {
+    serviceName: 'Coursera',
+    aliases: ['coursera', '코세라'],
+    domain: 'coursera.org',
+    officialUrl: 'https://www.coursera.org',
+    securityUrl: 'https://www.coursera.org/account/profile',
+  },
+  {
+    serviceName: 'Codecademy',
+    aliases: ['codecademy', '코드아카데미'],
+    domain: 'codecademy.com',
+    officialUrl: 'https://www.codecademy.com',
+    securityUrl: 'https://www.codecademy.com/settings',
+  },
+
+  // ── Device / hardware accounts ─────────────────────────────────────────
+  {
+    serviceName: 'Samsung Account',
+    aliases: ['samsung', '삼성', '삼성계정', 'samsung account', '삼성 account', 'galaxy'],
+    domain: 'samsung.com',
+    officialUrl: 'https://account.samsung.com',
+    securityUrl: 'https://account.samsung.com',
+  },
+
+  // ── Commerce / travel ──────────────────────────────────────────────────
+  {
+    serviceName: 'Hotels.com',
+    aliases: ['hotels.com', 'hotels', '호텔스닷컴'],
+    domain: 'hotels.com',
+    officialUrl: 'https://www.hotels.com',
+    securityUrl: 'https://www.hotels.com/account-settings',
+  },
+  {
+    serviceName: 'Marriott Bonvoy',
+    aliases: ['marriott', 'marriott bonvoy', '메리어트', 'bonvoy'],
+    domain: 'marriott.com',
+    officialUrl: 'https://www.marriott.com',
+    securityUrl: 'https://www.marriott.com/loyalty/myAccount.mi',
+  },
+
   // ── KR local ───────────────────────────────────────────────────────────
   {
     serviceName: 'Kakao',
@@ -278,6 +400,47 @@ export const SERVICE_REGISTRY: ServiceRegistryItem[] = [
     officialUrl: 'https://www.paypal.com',
     passwordUrl: 'https://www.paypal.com/myaccount/security/password',
     securityUrl: 'https://www.paypal.com/myaccount/security',
+  },
+  {
+    serviceName: '인프런',
+    aliases: ['인프런', 'inflearn', '인프런 소식'],
+    domain: 'inflearn.com',
+    officialUrl: 'https://www.inflearn.com',
+    securityUrl: 'https://www.inflearn.com/users/me/mypage',
+  },
+  {
+    serviceName: '프로그래머스',
+    aliases: ['프로그래머스', 'programmers', 'programmers.co.kr'],
+    domain: 'programmers.co.kr',
+    officialUrl: 'https://programmers.co.kr',
+  },
+  {
+    serviceName: '아임웹',
+    aliases: ['아임웹', 'imweb', 'imweb.me'],
+    domain: 'imweb.me',
+    officialUrl: 'https://imweb.me',
+    securityUrl: 'https://imweb.me/member/mypage',
+  },
+  {
+    serviceName: '위시켓',
+    aliases: ['위시켓', 'wishket'],
+    domain: 'wishket.com',
+    officialUrl: 'https://www.wishket.com',
+    securityUrl: 'https://www.wishket.com/mypage/',
+  },
+  {
+    serviceName: 'Make',
+    aliases: ['make', 'make.com', 'integromat', '메이크'],
+    domain: 'make.com',
+    officialUrl: 'https://www.make.com',
+    securityUrl: 'https://www.make.com/en/account/profile',
+  },
+  {
+    serviceName: 'CLIP STUDIO PAINT',
+    aliases: ['clip studio', 'clipstudio', 'celsys', 'clip studio paint', '클립스튜디오'],
+    domain: 'clipstudio.net',
+    officialUrl: 'https://www.clipstudio.net',
+    securityUrl: 'https://account.clip-studio.com',
   },
 ];
 

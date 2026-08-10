@@ -55,6 +55,12 @@ const SERVICE_STEP_PATHS: Record<string, Record<string, string>> = {
     Zoom: '프로필 → 비밀번호',
     Twitch: '설정 → 보안 및 개인정보',
     Reddit: 'User Settings → Account → password',
+    Figma: '설정(Settings) → 계정(Account) → 비밀번호',
+    Adobe: 'account.adobe.com → 프로필 → 비밀번호 변경',
+    Canva: '설정(Settings) → 계정 → 비밀번호',
+    JetBrains: 'account.jetbrains.com → 프로필 → 비밀번호 변경',
+    Unity: 'id.unity.com → 계정 수정 → 비밀번호 변경',
+    'Samsung Account': 'account.samsung.com → 보안 → 비밀번호 변경',
   },
   logout_sessions: {
     Google: 'myaccount.google.com → 보안 → 기기 관리',
@@ -73,6 +79,9 @@ const SERVICE_STEP_PATHS: Record<string, Record<string, string>> = {
     Facebook: '설정 → 보안 → 로그인 위치',
     Spotify: '계정 개요 → 로그아웃 모든 기기',
     Steam: '계정 → 보안 → 승인된 기기',
+    Adobe: 'account.adobe.com → 보안 → 로그인 기록',
+    'Samsung Account': 'account.samsung.com → 보안 → 기기 관리',
+    OpenAI: 'platform.openai.com → Settings → 세션 관리',
   },
   enable_2fa: {
     Google: 'myaccount.google.com → 보안 → 2단계 인증',
@@ -91,6 +100,9 @@ const SERVICE_STEP_PATHS: Record<string, Record<string, string>> = {
     Facebook: '설정 → 비밀번호 및 보안 → 2단계 인증',
     Steam: 'Steam Guard → 모바일 인증기',
     Twitch: '설정 → 보안 → 2단계 인증',
+    Adobe: 'account.adobe.com → 보안 → 2단계 인증',
+    'Samsung Account': 'account.samsung.com → 보안 → 2단계 인증',
+    Vercel: '계정 설정(Account Settings) → Security → Two-Factor Authentication',
   },
   verify_activity: {
     Google: 'myaccount.google.com → 보안 → 최근 보안 활동',
@@ -104,6 +116,9 @@ const SERVICE_STEP_PATHS: Record<string, Record<string, string>> = {
     Instagram: '로그인 활동',
     Facebook: '설정 → 보안 → 로그인 위치',
     Notion: 'Settings → My account → Devices',
+    Adobe: 'account.adobe.com → 보안 → 최근 로그인 기록',
+    'Samsung Account': 'account.samsung.com → 보안 → 최근 로그인 기록',
+    OpenAI: 'platform.openai.com → Settings → API 키 사용 기록',
   },
   check_recovery: {
     Google: 'myaccount.google.com → 개인 정보 → 복구 연락처',
@@ -152,6 +167,15 @@ const SERVICE_STEP_PATHS: Record<string, Record<string, string>> = {
     GitHub: 'Settings → Security log',
     Naver: '네이버ID → 보안설정',
     Kakao: '카카오계정 → 보안',
+    Figma: '설정(Settings) → 보안(Security) 탭',
+    Adobe: 'account.adobe.com → 보안',
+    'Samsung Account': 'account.samsung.com → 보안',
+    Vercel: '계정 설정(Account Settings) → Security',
+    OpenAI: 'platform.openai.com → Settings',
+    LinkedIn: '설정 및 개인정보 → 로그인 및 보안',
+    Notion: 'Settings → My account → Account security',
+    Slack: '계정 설정 → 보안',
+    Supabase: 'supabase.com/dashboard → Account → 보안',
   },
 };
 
