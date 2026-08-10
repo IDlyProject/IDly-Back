@@ -67,8 +67,6 @@ export const SERVICE_REGISTRY: ServiceRegistryItem[] = [
     aliases: ['amazon', '아마존', 'aws'],
     domain: 'amazon.com',
     officialUrl: 'https://www.amazon.com',
-    passwordUrl: 'https://www.amazon.com/gp/css/edit-password-entry',
-    securityUrl: 'https://www.amazon.com/gp/css/homepage.html',
   },
   {
     serviceName: 'Coupang',
@@ -83,8 +81,6 @@ export const SERVICE_REGISTRY: ServiceRegistryItem[] = [
     aliases: ['11번가', '11st', 'elevenst'],
     domain: '11st.co.kr',
     officialUrl: 'https://www.11st.co.kr',
-    passwordUrl: 'https://www.11st.co.kr/register/password',
-    securityUrl: 'https://www.11st.co.kr/register/account',
   },
   {
     serviceName: 'Gmarket',
@@ -110,8 +106,8 @@ export const SERVICE_REGISTRY: ServiceRegistryItem[] = [
     aliases: ['instagram', '인스타그램', 'insta'],
     domain: 'instagram.com',
     officialUrl: 'https://www.instagram.com',
-    passwordUrl: 'https://www.instagram.com/accounts/password/change/',
-    securityUrl: 'https://www.instagram.com/accounts/session/login_activity/',
+    passwordUrl: 'https://accountscenter.instagram.com/password_and_security/',
+    securityUrl: 'https://accountscenter.instagram.com/password_and_security/',
   },
   {
     serviceName: 'Facebook',
@@ -220,7 +216,7 @@ export const SERVICE_REGISTRY: ServiceRegistryItem[] = [
     domain: 'steampowered.com',
     officialUrl: 'https://store.steampowered.com',
     passwordUrl: 'https://store.steampowered.com/account/',
-    securityUrl: 'https://store.steampowered.com/twofactor/',
+    securityUrl: 'https://store.steampowered.com/account/',
   },
   {
     serviceName: 'Twitch',
@@ -293,15 +289,15 @@ export const SERVICE_REGISTRY: ServiceRegistryItem[] = [
     aliases: ['supabase', '수파베이스'],
     domain: 'supabase.com',
     officialUrl: 'https://supabase.com/dashboard',
-    securityUrl: 'https://supabase.com/dashboard/account',
+    securityUrl: 'https://supabase.com/dashboard',
   },
   {
     serviceName: 'JetBrains',
     aliases: ['jetbrains', '젯브레인', 'intellij', 'pycharm', 'webstorm', 'goland', 'rider'],
     domain: 'jetbrains.com',
     officialUrl: 'https://account.jetbrains.com',
-    passwordUrl: 'https://account.jetbrains.com/profile',
-    securityUrl: 'https://account.jetbrains.com/profile',
+    passwordUrl: 'https://account.jetbrains.com',
+    securityUrl: 'https://account.jetbrains.com',
   },
   {
     serviceName: 'Unity',
@@ -325,7 +321,6 @@ export const SERVICE_REGISTRY: ServiceRegistryItem[] = [
     aliases: ['codecademy', '코드아카데미'],
     domain: 'codecademy.com',
     officialUrl: 'https://www.codecademy.com',
-    securityUrl: 'https://www.codecademy.com/settings',
   },
 
   // ── Device / hardware accounts ─────────────────────────────────────────
@@ -350,7 +345,6 @@ export const SERVICE_REGISTRY: ServiceRegistryItem[] = [
     aliases: ['marriott', 'marriott bonvoy', '메리어트', 'bonvoy'],
     domain: 'marriott.com',
     officialUrl: 'https://www.marriott.com',
-    securityUrl: 'https://www.marriott.com/loyalty/myAccount.mi',
   },
 
   // ── KR local ───────────────────────────────────────────────────────────
@@ -375,8 +369,6 @@ export const SERVICE_REGISTRY: ServiceRegistryItem[] = [
     aliases: ['사람인', 'saramin', 'mailinfo.saramin.co.kr', 'saramin.co.kr'],
     domain: 'saramin.co.kr',
     officialUrl: 'https://www.saramin.co.kr',
-    passwordUrl: 'https://www.saramin.co.kr/zf_user/member/change-password',
-    securityUrl: 'https://www.saramin.co.kr/zf_user/member/persons/account',
   },
   {
     serviceName: 'Toss',
@@ -390,8 +382,8 @@ export const SERVICE_REGISTRY: ServiceRegistryItem[] = [
     aliases: ['line', '라인'],
     domain: 'line.me',
     officialUrl: 'https://line.me',
-    passwordUrl: 'https://account.line.biz',
-    securityUrl: 'https://account.line.biz',
+    passwordUrl: 'https://account.line.me',
+    securityUrl: 'https://account.line.me',
   },
   {
     serviceName: 'PayPal',
@@ -406,7 +398,6 @@ export const SERVICE_REGISTRY: ServiceRegistryItem[] = [
     aliases: ['인프런', 'inflearn', '인프런 소식'],
     domain: 'inflearn.com',
     officialUrl: 'https://www.inflearn.com',
-    securityUrl: 'https://www.inflearn.com/users/me/mypage',
   },
   {
     serviceName: '프로그래머스',
@@ -419,14 +410,12 @@ export const SERVICE_REGISTRY: ServiceRegistryItem[] = [
     aliases: ['아임웹', 'imweb', 'imweb.me'],
     domain: 'imweb.me',
     officialUrl: 'https://imweb.me',
-    securityUrl: 'https://imweb.me/member/mypage',
   },
   {
     serviceName: '위시켓',
     aliases: ['위시켓', 'wishket'],
     domain: 'wishket.com',
     officialUrl: 'https://www.wishket.com',
-    securityUrl: 'https://www.wishket.com/mypage/',
   },
   {
     serviceName: 'Make',
@@ -440,7 +429,6 @@ export const SERVICE_REGISTRY: ServiceRegistryItem[] = [
     aliases: ['clip studio', 'clipstudio', 'celsys', 'clip studio paint', '클립스튜디오'],
     domain: 'clipstudio.net',
     officialUrl: 'https://www.clipstudio.net',
-    securityUrl: 'https://account.clip-studio.com',
   },
 ];
 
