@@ -13,14 +13,33 @@ jobs:
       - name: Trigger deploy
         id: trigger
         run: |
-          RESPONSE=$(curl -sf -X POST \
-            "https://api.render.com/v1/services/${{ secrets.RENDER_SERVICE_ID }}/deploys" \
-            -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
-            -H "Content-Type: application/json" \
-            -d '{}')
-          DEPLOY_ID=$(echo "$RESPONSE" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
-          echo "deploy_id=$DEPLOY_ID" >> "$GITHUB_OUTPUT"
-          echo "Triggered deploy: $DEPLOY_ID"
+          for attempt in 1 2 3; do
+            RESPONSE=$(curl -sS -X POST \
+              "https://api.render.com/v1/services/${{ secrets.RENDER_SERVICE_ID }}/deploys" \
+              -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
+              -H "Content-Type: application/json" \
+              -d '{}' \
+              -w "\n%{http_code}")
+
+            HTTP_STATUS=$(echo "$RESPONSE" | tail -n1)
+            RESPONSE_BODY=$(echo "$RESPONSE" | sed '$d')
+            DEPLOY_ID=$(echo "$RESPONSE_BODY" | python3 -c "import sys, json; s=sys.stdin.read().strip();\ntry:\n    data=json.loads(s) if s else {}\nexcept json.JSONDecodeError:\n    data={}\nprint(data.get('id',''))")
+
+            if [[ "$HTTP_STATUS" =~ ^2[0-9][0-9]$ ]] && [ -n "$DEPLOY_ID" ]; then
+              echo "deploy_id=$DEPLOY_ID" >> "$GITHUB_OUTPUT"
+              echo "Triggered deploy: $DEPLOY_ID"
+              exit 0
+            fi
+
+            echo "Attempt $attempt failed (HTTP $HTTP_STATUS)."
+            if [ -n "$RESPONSE_BODY" ]; then
+              echo "Response body: $RESPONSE_BODY"
+            fi
+            sleep 5
+          done
+
+          echo "::error::Failed to trigger Render deploy after 3 attempts."
+          exit 1
 
       - name: Wait for deploy to go live
         run: |
