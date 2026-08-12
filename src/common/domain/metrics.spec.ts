@@ -18,12 +18,13 @@ describe('metrics', () => {
   });
 
   it('computes security score with shared formula', () => {
-    // 100 - 12*2 - 6*1 - 2*1 + 3*1 = 100 - 24 - 6 - 2 + 3 = 71
-    // high: two (action_required + resolved both count by riskLevel)
-    // medium: one, low: one, resolved: one
-    expect(computeSecurityScore(sample)).toBe(
-      Math.max(0, Math.min(100, 100 - 24 - 6 - 2 + 3)),
-    );
+    // raw 68, high가 남아 있으므로 양호 구간(80+)에 들어갈 수 없다.
+    expect(computeSecurityScore(sample)).toBe(68);
+  });
+
+  it('does not reward resolved accounts or show a remaining high risk as safe', () => {
+    expect(computeSecurityScore([{ riskLevel: 'safe', status: 'resolved' }])).toBe(100);
+    expect(computeSecurityScore([{ riskLevel: 'high', status: 'action_required' }])).toBe(79);
   });
 
   it('filters dormant/skipped from home metrics', () => {
