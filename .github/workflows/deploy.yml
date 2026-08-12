@@ -13,7 +13,7 @@ jobs:
       - name: Trigger deploy
         id: trigger
         run: |
-          RESPONSE=$(curl -sf -X POST \
+          RESPONSE=$(curl -sf --retry 3 --retry-delay 10 --retry-all-errors -X POST \
             "https://api.render.com/v1/services/${{ secrets.RENDER_SERVICE_ID }}/deploys" \
             -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
             -H "Content-Type: application/json" \
@@ -28,10 +28,10 @@ jobs:
           FAILED_STATUSES="deactivated build_failed update_failed canceled"
 
           for i in $(seq 1 40); do
-            STATUS=$(curl -sf \
+            DEPLOY_RESP=$(curl -sf --retry 3 --retry-delay 10 --retry-all-errors \
               "https://api.render.com/v1/services/${{ secrets.RENDER_SERVICE_ID }}/deploys/$DEPLOY_ID" \
-              -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
-              | python3 -c "import sys,json; print(json.load(sys.stdin)['status'])")
+              -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}")
+            STATUS=$(echo "$DEPLOY_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin)['status'])")
             echo "[$i/40] status: $STATUS"
 
             if [ "$STATUS" = "live" ]; then
