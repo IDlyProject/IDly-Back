@@ -12,11 +12,14 @@ import { SummaryModule } from './summary/summary.module';
 // 보안 리포트 기능은 현재 비활성화 상태이며, 재사용을 위해 구현 파일은 보존한다.
 // import { ReportModule } from './report/report.module';
 import { SecurityChatModule } from './security-chat/security-chat.module';
+import { GmailSyncModule } from './gmail-sync/gmail-sync.module';
+import { ScheduleModule } from '@nestjs/schedule';
 import { HealthController } from './health.controller';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
+    ScheduleModule.forRoot(),
     PrismaModule,
     AuthModule,
     UsersModule,
@@ -28,6 +31,7 @@ import { HealthController } from './health.controller';
     SummaryModule,
     // ReportModule,
     SecurityChatModule,
+    GmailSyncModule,
   ],
   controllers: [HealthController],
 })
