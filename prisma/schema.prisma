@@ -59,93 +59,19 @@ model WithdrawalLog {
 }
 
 model GmailAccount {
-  id                      String    @id @default(uuid())
-  userId                  String
-  email                   String    @unique
-  refreshToken            String
-  isPrimary               Boolean   @default(false)
-  label                   String?
-  status                  String    @default("connected") // connected | reconnect_required
-  lastSyncedAt            DateTime?
-  lastEmailReceivedAt     DateTime?
-  historyId               String?   @db.VarChar(32)
-  watchHistoryId          String?   @db.VarChar(32)
-  watchStatus             String    @default("disabled") // disabled | pending | active | renew_error | reconnect_required
-  watchExpiration         DateTime?
-  watchLastRenewedAt      DateTime?
-  lastPushAt              DateTime?
-  lastIncrementalSyncedAt DateTime?
-  nextRepairAt            DateTime?
-  syncLeaseOwner          String?
-  syncLeaseUntil          DateTime?
-  createdAt               DateTime  @default(now())
+  id                  String    @id @default(uuid())
+  userId              String
+  email               String    @unique
+  refreshToken        String
+  isPrimary           Boolean   @default(false)
+  label               String?
+  status              String    @default("connected") // connected | reconnect_required
+  lastSyncedAt        DateTime?
+  lastEmailReceivedAt DateTime?
+  createdAt           DateTime  @default(now())
 
-  user              User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  serviceAccounts   ServiceAccount[]
-  gmailPushEvents   GmailPushEvent[]
-  gmailSyncJobs     GmailSyncJob[]
-  processedMessages GmailProcessedMessage[]
-
-  @@index([watchStatus, watchExpiration])
-  @@index([syncLeaseUntil])
-  @@index([nextRepairAt])
-}
-
-/// Pub/Sub webhook를 빠르게 ACK하기 전에 영속화하는 durable inbox.
-/// 메일 주소/본문은 저장하지 않고 Pub/Sub 메시지 ID와 history cursor만 보존한다.
-model GmailPushEvent {
-  id                String    @id @default(uuid())
-  pubsubMessageId   String    @unique
-  gmailAccountId    String
-  notifiedHistoryId String    @db.VarChar(32)
-  publishedAt       DateTime?
-  status            String    @default("pending") // pending | enqueued | dead
-  createdAt         DateTime  @default(now())
-  processedAt       DateTime?
-
-  gmailAccount GmailAccount @relation(fields: [gmailAccountId], references: [id], onDelete: Cascade)
-
-  @@index([gmailAccountId, status])
-}
-
-/// push/poll/manual이 공유하는 durable sync job.
-/// SQL migration의 partial unique index가 계정당 active job을 하나로 제한한다.
-model GmailSyncJob {
-  id              String    @id @default(uuid())
-  gmailAccountId  String
-  trigger         String // push | repair_poll | manual | watch_bootstrap
-  targetHistoryId String?   @db.VarChar(32)
-  status          String    @default("pending") // pending | processing | completed | retry | dead
-  attemptCount    Int       @default(0)
-  availableAt     DateTime  @default(now())
-  leaseOwner      String?
-  leaseUntil      DateTime?
-  lastErrorCode   String?
-  createdAt       DateTime  @default(now())
-  startedAt       DateTime?
-  completedAt     DateTime?
-
-  gmailAccount GmailAccount @relation(fields: [gmailAccountId], references: [id], onDelete: Cascade)
-
-  @@index([status, availableAt])
-  @@index([gmailAccountId, status])
-  @@index([gmailAccountId, trigger, createdAt])
-}
-
-/// history 재전달에도 같은 Gmail message를 AI에 반복 전송하지 않기 위한 receipt.
-/// Gmail 원문이나 제목은 저장하지 않는다.
-model GmailProcessedMessage {
-  id             String   @id @default(uuid())
-  gmailAccountId String
-  gmailMessageId String
-  historyId      String?  @db.VarChar(32)
-  analysisRunId  String?
-  processedAt    DateTime @default(now())
-
-  gmailAccount GmailAccount @relation(fields: [gmailAccountId], references: [id], onDelete: Cascade)
-
-  @@unique([gmailAccountId, gmailMessageId])
-  @@index([gmailAccountId, processedAt])
+  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  serviceAccounts ServiceAccount[]
 }
 
 model AnalysisRun {
