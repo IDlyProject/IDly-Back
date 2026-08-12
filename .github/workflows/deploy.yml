@@ -35,7 +35,9 @@ jobs:
             if [ -n "$RESPONSE_BODY" ]; then
               echo "Response body: $RESPONSE_BODY"
             fi
-            sleep 5
+            if [ "$attempt" -lt 3 ]; then
+              sleep 5
+            fi
           done
 
           echo "::error::Failed to trigger Render deploy after 3 attempts."
