@@ -237,15 +237,15 @@ model SecurityChatSession {
 model SecurityChatMessage {
   id        String   @id @default(uuid())
   chatId    String
-  sessionId String
+  sessionId String?
   role      String   // user | assistant
   type      String   // text | action_list | official_link | card_news | tip | exit_cta
   content   String
   metadata  Json?
   createdAt DateTime @default(now())
 
-  chat SecurityChat @relation(fields: [chatId], references: [id], onDelete: Cascade)
-  session SecurityChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  chat    SecurityChat         @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  session SecurityChatSession? @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
   @@index([chatId, createdAt])
   @@index([sessionId, createdAt])
