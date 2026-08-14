@@ -7,6 +7,7 @@ import {
   IsString,
   Matches,
   MaxLength,
+  IsEnum,
 } from 'class-validator';
 
 export class UpdateProfileDto {
@@ -19,6 +20,15 @@ export class UpdateProfileDto {
   })
   @IsOptional()
   name?: string;
+
+  @ApiPropertyOptional({ description: '닉네임 (마이 화면 프로필 카드 표시용)', example: '민수' })
+  @IsString()
+  @MaxLength(20)
+  @Matches(/^[^<>`]*$/, {
+    message: '닉네임에 <, >, ` 문자는 사용할 수 없습니다.',
+  })
+  @IsOptional()
+  nickname?: string;
 
   @ApiPropertyOptional({ description: '전화번호', example: '010-1234-5678' })
   @IsString()
@@ -63,4 +73,14 @@ export class UpdateProfileDto {
   @IsBoolean()
   @IsOptional()
   marketingAgreed?: boolean;
+
+  @ApiPropertyOptional({
+    example: true,
+    description:
+      '온보딩 완료 여부 — 분석 완료 후 홈 화면 최초 진입 시 true로 설정. GET /users/me 응답의 onboardingCompleted가 false이면 앱 진입 시 분석 화면부터 재진행.',
+  })
+  @IsBoolean()
+  @Equals(true)
+  @IsOptional()
+  onboardingCompleted?: true;
 }

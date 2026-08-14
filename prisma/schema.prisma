@@ -9,6 +9,7 @@ datasource db {
 model User {
   id                    String    @id @default(uuid())
   name                  String?
+  nickname              String?
   phone                 String?
   ageGroup              String?
   requiredTermsAgreed   Boolean   @default(false)
@@ -26,6 +27,7 @@ model User {
   alertSecurityTip      Boolean   @default(false)
   alertEventPromo       Boolean   @default(false)
 
+  onboardingCompleted   Boolean   @default(false)
   lastLoginAt           DateTime?
   createdAt             DateTime  @default(now())
 
@@ -330,6 +332,17 @@ model BetaApplicant {
   email     String   @unique
   phone     String
   createdAt DateTime @default(now())
+}
+
+model Waitlist {
+  id             String    @id @default(cuid())
+  name           String
+  phone          String    @unique
+  emails         String[]
+  status         String    @default("pending") // pending | approved
+  token          String?   @unique
+  tokenCreatedAt DateTime?
+  createdAt      DateTime  @default(now())
 }
 
 // IDly-apps-in-toss 서비스에서 사용하는 테이블 — 직접 수정 금지

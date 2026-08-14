@@ -6,6 +6,7 @@ import { UsersModule } from './users/users.module';
 import { GmailModule } from './gmail/gmail.module';
 import { AnalysisModule } from './analysis/analysis.module';
 import { BetaModule } from './beta/beta.module';
+import { WaitlistModule } from './waitlist/waitlist.module';
 import { HomeModule } from './home/home.module';
 import { RisksModule } from './risks/risks.module';
 import { SummaryModule } from './summary/summary.module';
@@ -26,6 +27,7 @@ import { HealthController } from './health.controller';
     GmailModule,
     AnalysisModule,
     BetaModule,
+    WaitlistModule,
     HomeModule,
     RisksModule,
     SummaryModule,

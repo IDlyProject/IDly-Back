@@ -33,11 +33,13 @@ export class AuthService {
     );
   }
 
-  /** 화면 01 — 최초 로그인용 OAuth URL */
+  /** 화면 01 — 로그인용 OAuth URL
+   * select_account: 기존 유저는 동의 화면 없이 계정 선택만, 신규 유저는 Google이 자동으로 consent 표시
+   */
   getAuthUrl(): string {
     return this.oauth2Client.generateAuthUrl({
       access_type: 'offline',
-      prompt: 'consent',
+      prompt: 'select_account',
       scope: this.SCOPES,
     });
   }
@@ -79,19 +81,28 @@ export class AuthService {
   async handleCallback(code: string, state?: string) {
     const { tokens } = await this.oauth2Client.getToken(code);
 
-    if (!tokens.refresh_token) {
-      throw new UnauthorizedException(
-        'refresh_token이 발급되지 않았습니다.\n' +
-          'Google 계정 > 보안 > IDly 앱 권한을 해제한 뒤 다시 시도해주세요.',
-      );
-    }
-
     this.oauth2Client.setCredentials(tokens);
 
     const oauth2 = google.oauth2({ version: 'v2', auth: this.oauth2Client });
     const { data } = await oauth2.userinfo.get();
     const email = data.email ?? '';
     const name = data.name ?? '';
+
+    // refresh_token이 없으면 기존 계정(재로그인)인지 확인
+    // 기존 계정: DB에 저장된 refresh_token 사용 → 그대로 통과
+    // 신규 계정: refresh_token 없으면 인증 불가
+    if (!tokens.refresh_token) {
+      const existing = await this.prisma.gmailAccount.findUnique({
+        where: { email },
+        select: { id: true },
+      });
+      if (!existing) {
+        throw new UnauthorizedException(
+          'refresh_token이 발급되지 않았습니다.\n' +
+            'Google 계정 > 보안 > IDly 앱 권한을 해제한 뒤 다시 시도해주세요.',
+        );
+      }
+    }
 
     let addToUserId: string | undefined;
     if (state) {
@@ -112,7 +123,7 @@ export class AuthService {
     const { user, gmailAccount } = await this.usersService.upsertFromGoogle({
       email,
       name,
-      refreshToken: tokens.refresh_token,
+      refreshToken: tokens.refresh_token ?? undefined,
       addToUserId,
     });
 

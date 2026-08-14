@@ -30,7 +30,7 @@ export class UsersService {
   async upsertFromGoogle(data: {
     email: string;
     name: string;
-    refreshToken: string;
+    refreshToken?: string; // 재로그인 시 Google이 생략할 수 있음 — 없으면 기존 값 유지
     addToUserId?: string; // 추가 계정 연결 시 기존 유저 ID
   }) {
     const existing = await this.prisma.gmailAccount.findUnique({
@@ -48,16 +48,26 @@ export class UsersService {
         });
       }
 
-      // 로그인 또는 동일 유저 재연동: refresh token만 갱신
+      // 로그인 또는 동일 유저 재연동: refresh token 있을 때만 갱신 (재로그인 시 Google이 생략 가능)
       const gmailAccount = await this.prisma.gmailAccount.update({
         where: { email: data.email },
         data: {
-          refreshToken: encryptToken(data.refreshToken, this.encryptionKey),
+          ...(data.refreshToken
+            ? { refreshToken: encryptToken(data.refreshToken, this.encryptionKey) }
+            : {}),
           status: 'connected',
         },
         include: { user: true },
       });
       return { user: gmailAccount.user, gmailAccount };
+    }
+
+    // 추가 계정 또는 신규 유저 — 반드시 refresh_token 필요
+    if (!data.refreshToken) {
+      throw new ConflictException({
+        errorCode: 'refresh_token_missing',
+        message: 'refresh_token이 발급되지 않았습니다. Google 계정 > 보안 > IDly 앱 권한을 해제한 뒤 다시 시도해주세요.',
+      });
     }
 
     // 추가 계정: 기존 유저에 Gmail 계정 추가
@@ -107,12 +117,14 @@ export class UsersService {
         select: {
           id: true,
           name: true,
+          nickname: true,
           phone: true,
           ageGroup: true,
           requiredTermsAgreed: true,
           requiredTermsAgreedAt: true,
           notificationAgreed: true,
           marketingAgreed: true,
+          onboardingCompleted: true,
           createdAt: true,
           lastLoginAt: true,
           gmailAccounts: {
@@ -250,17 +262,20 @@ export class UsersService {
     userId: string,
     dto: {
       name?: string;
+      nickname?: string;
       phone?: string;
       ageGroup?: string;
       requiredTermsAgreed?: true;
       notificationAgreed?: boolean;
       marketingAgreed?: boolean;
+      onboardingCompleted?: true;
     },
   ) {
     if (dto.name != null) assertSafeDisplayText(dto.name, '이름');
+    if (dto.nickname != null) assertSafeDisplayText(dto.nickname, '닉네임');
     if (dto.phone != null) assertSafeDisplayText(dto.phone, '전화번호');
 
-    const { requiredTermsAgreed, notificationAgreed, marketingAgreed, ...profileFields } = dto;
+    const { requiredTermsAgreed, notificationAgreed, marketingAgreed, onboardingCompleted, ...profileFields } = dto;
 
     const consentData: Record<string, unknown> = {};
     if (requiredTermsAgreed) {
@@ -273,6 +288,7 @@ export class UsersService {
     }
     if (notificationAgreed !== undefined) consentData.notificationAgreed = notificationAgreed;
     if (marketingAgreed !== undefined) consentData.marketingAgreed = marketingAgreed;
+    if (onboardingCompleted) consentData.onboardingCompleted = true;
 
     return this.prisma.user.update({
       where: { id: userId },
@@ -280,12 +296,14 @@ export class UsersService {
       select: {
         id: true,
         name: true,
+        nickname: true,
         phone: true,
         ageGroup: true,
         requiredTermsAgreed: true,
         requiredTermsAgreedAt: true,
         notificationAgreed: true,
         marketingAgreed: true,
+        onboardingCompleted: true,
         createdAt: true,
       },
     });

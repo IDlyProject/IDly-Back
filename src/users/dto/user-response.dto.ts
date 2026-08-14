@@ -61,6 +61,12 @@ export class UserDto {
   @ApiPropertyOptional({ example: '홍길동' })
   name: string | null;
 
+  @ApiPropertyOptional({
+    example: '민수',
+    description: '닉네임 — 마이 화면 프로필 카드에 표시. null이면 name으로 대체.',
+  })
+  nickname: string | null;
+
   @ApiPropertyOptional({ example: '010-1234-5678' })
   phone: string | null;
 
@@ -85,6 +91,13 @@ export class UserDto {
   @ApiPropertyOptional({ example: '2026-07-16T00:00:00.000Z' })
   lastLoginAt: string | null;
 
+  @ApiProperty({
+    example: false,
+    description:
+      '온보딩 완료 여부. false이면 앱 진입 시 분석 화면부터 재진행. 분석 완료 후 홈 최초 진입 시 PATCH /users/me { onboardingCompleted: true }로 설정.',
+  })
+  onboardingCompleted: boolean;
+
   @ApiProperty({ example: 3 })
   dormantAccountCount: number;
 
@@ -105,6 +118,9 @@ export class UserProfileDto {
   @ApiPropertyOptional({ example: '홍길동' })
   name: string | null;
 
+  @ApiPropertyOptional({ example: '민수', description: '닉네임' })
+  nickname: string | null;
+
   @ApiPropertyOptional({ example: '010-1234-5678' })
   phone: string | null;
 
@@ -122,6 +138,9 @@ export class UserProfileDto {
 
   @ApiProperty({ example: false })
   marketingAgreed: boolean;
+
+  @ApiProperty({ example: false, description: '온보딩 완료 여부' })
+  onboardingCompleted: boolean;
 
   @ApiProperty({ example: '2026-07-01T00:00:00.000Z' })
   createdAt: string;
