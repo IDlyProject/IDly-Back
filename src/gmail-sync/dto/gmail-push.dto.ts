@@ -19,6 +19,12 @@ export class PubSubMessageDto {
   @MaxLength(256)
   messageId: string;
 
+  // Google Pub/Sub sends both camelCase and snake_case variants
+  @IsString()
+  @IsOptional()
+  @MaxLength(256)
+  message_id?: string;
+
   @IsBase64()
   @IsNotEmpty()
   data: string;
@@ -26,6 +32,10 @@ export class PubSubMessageDto {
   @IsISO8601()
   @IsOptional()
   publishTime?: string;
+
+  @IsString()
+  @IsOptional()
+  publish_time?: string;
 
   @IsObject()
   @IsOptional()

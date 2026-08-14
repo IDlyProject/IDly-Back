@@ -27,11 +27,11 @@ export class GmailPushInboxService {
       const event = await this.prisma.$transaction(async (tx) => {
         const stored = await tx.gmailPushEvent.create({
           data: {
-            pubsubMessageId: envelope.message.messageId,
+            pubsubMessageId: envelope.message.messageId ?? envelope.message.message_id,
             gmailAccountId: account.id,
             notifiedHistoryId: data.historyId,
-            publishedAt: envelope.message.publishTime
-              ? new Date(envelope.message.publishTime)
+            publishedAt: (envelope.message.publishTime ?? envelope.message.publish_time)
+              ? new Date(envelope.message.publishTime ?? envelope.message.publish_time!)
               : null,
           },
           select: { id: true },
