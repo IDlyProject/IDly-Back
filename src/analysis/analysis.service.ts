@@ -170,6 +170,42 @@ export class AnalysisService implements OnModuleInit {
     };
   }
 
+  /** 스케줄러 전용 — cooldown 체크 없이 재분석 실행. 진행 중인 run이 있으면 skip. */
+  async triggerScheduledAnalysis(userId: string): Promise<'started' | 'skipped'> {
+    const accounts = await this.prisma.gmailAccount.findMany({
+      where: { userId, status: 'connected' },
+    });
+    if (!accounts.length) return 'skipped';
+
+    const running = await this.prisma.analysisRun.findFirst({
+      where: {
+        userId,
+        status: { in: ['queued', 'scanning'] },
+        startedAt: { gte: new Date(Date.now() - ANALYSIS_ORPHAN_TTL_MS) },
+      },
+    });
+    if (running) return 'skipped';
+
+    const run = await this.prisma.analysisRun.create({
+      data: {
+        userId,
+        status: 'queued',
+        mode: 'manual',
+        progress: 0,
+        currentStep: 'waiting',
+        displayMessage: STEP_MESSAGES['waiting'],
+      },
+    });
+
+    setImmediate(() => {
+      this.runPipeline(run.id, userId, accounts).catch((e) => {
+        this.logger.error(`[scheduled][runId=${run.id}] pipeline error: ${e}`);
+      });
+    });
+
+    return 'started';
+  }
+
   async getStatus(analysisId: string, userId: string) {
     const run = await this.prisma.analysisRun.findFirst({
       where: { id: analysisId, userId },
