@@ -36,7 +36,8 @@ export class HomeController {
 - \`metrics\`: 총 서비스 계정 수, 조치 필요 수, 보안 점수
 - \`riskSummary\`: 가장 긴급한 위험 요약 또는 안전 메시지
 - \`serviceAccounts[]\`: 홈 카드 목록. 각 카드에 \`sourceMailAccount\`와 서비스 로고용 \`iconUrl\`/\`iconLabel\` 포함
-- \`cardNews[]\`: 카드뉴스 목록`,
+- \`cardNews[]\`: 카드뉴스 배열 — **우선순위 순으로 정렬되어 내려옵니다. 프론트는 배열 전체를 순서대로 표시하거나, 상위 N개만 표시하면 됩니다.** 현재는 고정 3개, 추후 사용자 계정 상태 기반 개인화 예정.
+- \`immediateActions[]\`: 하단 시트 즉시 할 일 목록 (현재 목 데이터, 추후 실제 ActionItem 연동 예정)`,
   })
   @ApiQuery({
     name: 'mailAccountId',

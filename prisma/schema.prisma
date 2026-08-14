@@ -9,6 +9,7 @@ datasource db {
 model User {
   id                    String    @id @default(uuid())
   name                  String?
+  nickname              String?
   phone                 String?
   ageGroup              String?
   requiredTermsAgreed   Boolean   @default(false)
@@ -26,6 +27,7 @@ model User {
   alertSecurityTip      Boolean   @default(false)
   alertEventPromo       Boolean   @default(false)
 
+  onboardingCompleted   Boolean   @default(false)
   lastLoginAt           DateTime?
   createdAt             DateTime  @default(now())
 

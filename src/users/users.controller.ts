@@ -48,6 +48,10 @@ export class UsersController {
 - \`requiredTermsAgreedAt\`은 최초 동의 시각으로만 기록되며 이후 변경되지 않습니다.
 - \`notificationAgreed\`, \`marketingAgreed\`는 선택 동의로, 생략 시 기존 값을 유지합니다.
 
+**닉네임**: \`nickname\` 필드로 전달하세요. 마이 화면 프로필 카드에 표시됩니다. null이면 \`name\`으로 대체해주세요.
+
+**온보딩 완료 마킹**: 분석 완료 후 홈 화면 최초 진입 시 \`{ onboardingCompleted: true }\`를 전송하세요. 이후 앱 재진입 시 \`GET /users/me\`의 \`onboardingCompleted\` 값으로 분석 화면 스킵 여부를 결정합니다.
+
 **마이 화면 프로필 수정 시**: 프로필 필드만 전송하면 됩니다.`,
   })
   @ApiResponse({
@@ -92,7 +96,8 @@ export class UsersController {
 온보딩 대표 계정 확인(1-2), 마이 화면(4-1), 계정 관리(4-2)에서 함께 사용됩니다.
 
 **응답 포함 정보**
-- \`id\`, \`name\`, \`phone\`, \`ageGroup\`, \`requiredTermsAgreed\`, \`requiredTermsAgreedAt\`, \`notificationAgreed\`, \`marketingAgreed\`
+- \`id\`, \`name\`, \`nickname\`, \`phone\`, \`ageGroup\`, \`requiredTermsAgreed\`, \`requiredTermsAgreedAt\`, \`notificationAgreed\`, \`marketingAgreed\`
+- \`onboardingCompleted\`: 온보딩 완료 여부 — **앱 진입 시 이 값이 false이면 분석 화면(1-3, 6-1-Analy)부터 재진행해야 합니다.** 분석 완료 후 홈 화면 최초 진입 시 \`PATCH /users/me { onboardingCompleted: true }\`로 설정하세요.
 - \`createdAt\`: 가입일 (계정 관리 화면 계정 정보 섹션)
 - \`lastLoginAt\`: 마지막 로그인 일시 (계정 관리 화면 계정 정보 섹션)
 - \`connectedAccountCount\`: 연동된 Gmail 계정 총 수 (대표 포함, 계정 관리 화면 계정 정보 섹션)

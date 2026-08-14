@@ -117,12 +117,14 @@ export class UsersService {
         select: {
           id: true,
           name: true,
+          nickname: true,
           phone: true,
           ageGroup: true,
           requiredTermsAgreed: true,
           requiredTermsAgreedAt: true,
           notificationAgreed: true,
           marketingAgreed: true,
+          onboardingCompleted: true,
           createdAt: true,
           lastLoginAt: true,
           gmailAccounts: {
@@ -260,17 +262,20 @@ export class UsersService {
     userId: string,
     dto: {
       name?: string;
+      nickname?: string;
       phone?: string;
       ageGroup?: string;
       requiredTermsAgreed?: true;
       notificationAgreed?: boolean;
       marketingAgreed?: boolean;
+      onboardingCompleted?: true;
     },
   ) {
     if (dto.name != null) assertSafeDisplayText(dto.name, '이름');
+    if (dto.nickname != null) assertSafeDisplayText(dto.nickname, '닉네임');
     if (dto.phone != null) assertSafeDisplayText(dto.phone, '전화번호');
 
-    const { requiredTermsAgreed, notificationAgreed, marketingAgreed, ...profileFields } = dto;
+    const { requiredTermsAgreed, notificationAgreed, marketingAgreed, onboardingCompleted, ...profileFields } = dto;
 
     const consentData: Record<string, unknown> = {};
     if (requiredTermsAgreed) {
@@ -283,6 +288,7 @@ export class UsersService {
     }
     if (notificationAgreed !== undefined) consentData.notificationAgreed = notificationAgreed;
     if (marketingAgreed !== undefined) consentData.marketingAgreed = marketingAgreed;
+    if (onboardingCompleted) consentData.onboardingCompleted = true;
 
     return this.prisma.user.update({
       where: { id: userId },
@@ -290,12 +296,14 @@ export class UsersService {
       select: {
         id: true,
         name: true,
+        nickname: true,
         phone: true,
         ageGroup: true,
         requiredTermsAgreed: true,
         requiredTermsAgreedAt: true,
         notificationAgreed: true,
         marketingAgreed: true,
+        onboardingCompleted: true,
         createdAt: true,
       },
     });
