@@ -487,7 +487,7 @@ export class AnalysisService implements OnModuleInit {
 
   private async saveResults(
     gmailAccountId: string,
-    runId: string,
+    runId: string | null,
     result: AiAnalyzeResponse,
     lastEmailDate: Date | null,
   ) {
@@ -697,6 +697,20 @@ export class AnalysisService implements OnModuleInit {
         data: { lastSyncedAt: new Date(), lastEmailReceivedAt: lastEmailDate },
       });
     }
+  }
+
+  /**
+   * Push 기반 증분 동기화용. mini mbox 경로를 받아 AI 분석 후 결과를 저장한다.
+   * AnalysisRun을 생성하지 않으므로 analysisRunId는 null로 기록된다.
+   * tmpMboxPath 파일은 호출 측에서 삭제해야 한다.
+   */
+  async analyzeAndSaveIncremental(
+    gmailAccountId: string,
+    tmpMboxPath: string,
+    lastEmailDate: Date | null,
+  ): Promise<void> {
+    const result = await this.uploadMboxToAI(tmpMboxPath);
+    await this.saveResults(gmailAccountId, null, result, lastEmailDate);
   }
 
   // ─── 분류 (순수 로직: ai-risk-mapping / domain/status) ─────────────────────

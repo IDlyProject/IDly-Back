@@ -242,6 +242,80 @@ export class GmailService {
           'Gmail 권한이 만료되었거나 취소되었습니다. 계정을 다시 연결해 주세요.',
         );
       }
+
+      throw error;
+    }
+  }
+
+  /**
+   * 지정된 message ID 목록만 mbox로 빌드한다.
+   * Push 기반 증분 동기화용 — userId 없이 gmailAccountId만으로 계정을 조회한다.
+   * 호출 측에서 tmpPath 파일을 반드시 삭제해야 함.
+   */
+  async fetchMessagesByIdsAsMbox(
+    gmailAccountId: string,
+    messageIds: string[],
+  ): Promise<{ tmpPath: string; lastEmailDate: Date | null }> {
+    const account = await this.prisma.gmailAccount.findUnique({
+      where: { id: gmailAccountId },
+    });
+    if (!account) throw new NotFoundException('Gmail 계정을 찾을 수 없습니다.');
+
+    let plainRefreshToken: string;
+    if (isEncrypted(account.refreshToken)) {
+      plainRefreshToken = decryptToken(account.refreshToken, this.encryptionKey);
+    } else {
+      plainRefreshToken = account.refreshToken;
+    }
+
+    const auth = this.getOAuth2Client(plainRefreshToken);
+    const gmail = google.gmail({ version: 'v1', auth });
+
+    const MAX_RAW_BYTES = this.intConfig('GMAIL_MAX_RAW_MESSAGE_BYTES', 5_000_000);
+    const tmpPath = join(tmpdir(), `mbox-inc-${gmailAccountId}-${Date.now()}.mbox`);
+    const writer = createWriteStream(tmpPath, { encoding: 'binary' });
+    let lastEmailDate: Date | null = null;
+
+    try {
+      const results = await Promise.allSettled(
+        messageIds.map((id) =>
+          withRetry(() => gmail.users.messages.get({ userId: 'me', id, format: 'raw' })),
+        ),
+      );
+
+      for (const result of results) {
+        if (result.status === 'rejected') {
+          if (this.isAuthError(result.reason)) throw result.reason;
+          this.logger.warn(`incremental message fetch failed: ${(result.reason as Error)?.message}`);
+          continue;
+        }
+        const msg = (result.value as any).data;
+        if (!msg?.raw) continue;
+
+        const rawBytes = Buffer.from(msg.raw, 'base64url');
+        if (rawBytes.byteLength > MAX_RAW_BYTES) continue;
+
+        const emailDate = msg.internalDate ? new Date(parseInt(msg.internalDate)) : new Date();
+        if (!lastEmailDate || emailDate > lastEmailDate) lastEmailDate = emailDate;
+
+        const header = `From mboxrd@localhost ${emailDate.toUTCString()}\n`;
+        await this.writeMboxChunk(writer, header);
+        await this.writeMboxChunk(writer, rawBytes);
+        await this.writeMboxChunk(writer, '\n\n');
+      }
+
+      writer.end();
+      await once(writer, 'finish');
+      return { tmpPath, lastEmailDate };
+    } catch (error) {
+      writer.destroy();
+      await unlink(tmpPath).catch(() => undefined);
+      if (this.isAuthError(error)) {
+        await this.markReconnectRequired(gmailAccountId);
+        throw new UnauthorizedException(
+          'Gmail 권한이 만료되었거나 취소되었습니다. 계정을 다시 연결해 주세요.',
+        );
+      }
       throw error;
     }
   }
