@@ -41,8 +41,14 @@ export class WaitlistController {
 
   @Get('waitlist/verify')
   @RateLimit({ limit: 20, windowMs: 60 * 60 * 1000, key: 'ip' })
-  @ApiOperation({ summary: '알림톡 토큰 검증' })
-  @ApiResponse({ status: 200, description: '토큰 유효' })
+  @ApiOperation({
+    summary: '알림톡 토큰 검증',
+    description: `알림톡 링크의 \`token\` 파라미터를 검증합니다.
+
+**성공 후 플로우**: \`{ approved: true }\` 응답 시 \`GET /auth/google\`로 이동해 Google OAuth 시작.
+토큰을 sessionStorage에 저장해두고 \`/auth/callback\` 도달 후 회원가입 완료 처리.`,
+  })
+  @ApiResponse({ status: 200, description: '토큰 유효 — 이후 /auth/google로 이동' })
   @ApiResponse({ status: 400, description: 'expired_token' })
   @ApiResponse({ status: 404, description: 'invalid_token' })
   verifyToken(@Query('token') token: string) {

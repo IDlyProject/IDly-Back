@@ -22,7 +22,8 @@ export class SolapiService {
       return;
     }
 
-    const approvalUrl = `https://idly.app/login?token=${params.token}`;
+    const frontendUrl = this.config.get<string>('FRONTEND_URL', 'https://idly.app');
+    const approvalUrl = `${frontendUrl}/login?token=${params.token}`;
 
     // TODO: solapi npm 패키지 설치 후 아래 주석 해제
     // const solapi = new SolapiMessageService(apiKey, apiSecret);

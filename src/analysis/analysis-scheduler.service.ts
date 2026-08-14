@@ -23,25 +23,20 @@ export class AnalysisSchedulerService {
 
     const cutoff = new Date(Date.now() - REANALYSIS_INTERVAL_DAYS * 24 * 60 * 60 * 1000);
 
-    // 연결된 Gmail 계정이 있는 유저 중 마지막 완료 분석이 7일 초과이거나 한 번도 분석 안 된 유저
-    const users = await this.prisma.user.findMany({
+    // DB 레벨에서 필터: 7일 이상 미분석이거나 한 번도 완료 분석 없는 유저
+    const targets = await this.prisma.user.findMany({
       where: {
         gmailAccounts: { some: { status: 'connected' } },
+        OR: [
+          { analysisRuns: { none: { status: 'completed' } } },
+          {
+            analysisRuns: {
+              none: { status: 'completed', completedAt: { gte: cutoff } },
+            },
+          },
+        ],
       },
-      select: {
-        id: true,
-        analysisRuns: {
-          where: { status: 'completed' },
-          orderBy: { completedAt: 'desc' },
-          take: 1,
-          select: { completedAt: true },
-        },
-      },
-    });
-
-    const targets = users.filter((u) => {
-      const lastAt = u.analysisRuns[0]?.completedAt;
-      return !lastAt || lastAt < cutoff;
+      select: { id: true },
     });
 
     this.logger.log(`[periodic] ${targets.length} user(s) due for reanalysis`);
