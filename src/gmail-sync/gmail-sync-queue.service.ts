@@ -358,7 +358,7 @@ export class GmailSyncQueueService {
           syncLeaseOwner: input.workerId,
           syncLeaseUntil: { gt: now },
         },
-        data: { historyId: input.newHistoryId, syncLeaseOwner: null, syncLeaseUntil: null },
+        data: { historyId: input.newHistoryId, lastSyncedAt: now, syncLeaseOwner: null, syncLeaseUntil: null },
       });
       if (accountReset.count !== 1) {
         throw new ConflictException(

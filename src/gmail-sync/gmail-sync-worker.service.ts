@@ -22,6 +22,7 @@ const BACKOFF_BASE_MS = 30_000;
 export class GmailSyncWorkerService {
   private readonly logger = new Logger(GmailSyncWorkerService.name);
   private readonly workerId = randomUUID();
+  private running = false;
 
   constructor(
     private readonly config: ConfigService,
@@ -37,7 +38,16 @@ export class GmailSyncWorkerService {
   @Interval(5_000)
   async runNext(): Promise<void> {
     if (!this.enabled()) return;
+    if (this.running) return;
+    this.running = true;
+    try {
+      await this._runNext();
+    } finally {
+      this.running = false;
+    }
+  }
 
+  private async _runNext(): Promise<void> {
     const job = await this.queue.claimNext(this.workerId);
     if (!job) return;
 
