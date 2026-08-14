@@ -45,8 +45,10 @@ export class HomeService {
       include: {
         serviceAccounts: {
           include: {
-            _count: {
-              select: { riskEvidences: true },
+            _count: { select: { riskEvidences: true } },
+            actionItems: {
+              where: { isRequired: true, status: { in: ['pending', 'failed'] } },
+              orderBy: { order: 'asc' },
             },
           },
         },
@@ -87,25 +89,35 @@ export class HomeService {
     const actionRequiredCount = countActionRequired(allServiceAccounts);
     const securityScore = computeSecurityScore(allServiceAccounts);
 
-    const topRisk = allServiceAccounts
+    const actionRequiredSa = allServiceAccounts
       .filter((sa) => sa.status === 'action_required')
-      .sort(
-        (a, b) => this.riskWeight(b.riskLevel) - this.riskWeight(a.riskLevel),
-      )[0];
+      .sort((a, b) => this.riskWeight(b.riskLevel) - this.riskWeight(a.riskLevel));
+
+    const topRisk = actionRequiredSa[0] ?? null;
 
     const riskSummary = topRisk
       ? {
           state: 'has_risk' as const,
-          title: `가장 먼저 ${topRisk.displayName ?? topRisk.serviceName} 확인`,
-          subtitle: `${this.riskTypeLabel(topRisk.primaryRiskType)} · ${this.riskLevelLabel(topRisk.riskLevel)}`,
+          title: null,
           serviceAccountId: topRisk.id,
         }
       : {
           state: 'safe' as const,
-          title: '모든 계정이 양호합니다',
-          subtitle: `통합 보안 점수 ${securityScore}점`,
+          title: null,
           serviceAccountId: null,
         };
+
+    const immediateActions = actionRequiredSa.flatMap((sa) => {
+      const displayName = sa.displayName ?? sa.serviceName;
+      const severity: 'high' | 'medium' = sa.riskLevel === 'high' ? 'high' : 'medium';
+      return sa.actionItems.map((item) => ({
+        id: item.id,
+        serviceAccountId: sa.id,
+        severity,
+        title: `${displayName} ${item.title}`,
+        description: item.description ?? null,
+      }));
+    });
 
     return {
       analysisId: lastRun?.id ?? null,
@@ -143,6 +155,7 @@ export class HomeService {
         evidenceCount: sa._count.riskEvidences,
       })),
       cardNews: CARD_NEWS,
+      immediateActions,
     };
   }
 
@@ -150,23 +163,4 @@ export class HomeService {
     return { high: 3, medium: 2, low: 1, safe: 0 }[level] ?? 0;
   }
 
-  private riskTypeLabel(riskType: string | null): string {
-    const map: Record<string, string> = {
-      new_device_login: '새 기기 로그인',
-      password_reset: '비밀번호 재설정',
-      verification_code: '인증 코드',
-      account_recovery: '계정 복구',
-      permission_grant: '권한 허용',
-      security_recommendation: '보안 알림',
-    };
-    return map[riskType ?? ''] ?? '보안 알림';
-  }
-
-  private riskLevelLabel(level: string): string {
-    return (
-      { high: '위험도 높음', medium: '위험도 중간', low: '주의', safe: '안전' }[
-        level
-      ] ?? ''
-    );
-  }
 }
