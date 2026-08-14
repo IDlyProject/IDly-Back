@@ -176,7 +176,9 @@ export class GmailService {
         for (const result of results) {
           if (result.status === 'rejected') {
             if (this.isAuthError(result.reason)) throw result.reason;
-            this.logger.warn(`message fetch failed: ${(result.reason as Error)?.message ?? result.reason}`);
+            this.logger.warn(
+              `message fetch failed: ${(result.reason as Error)?.message ?? result.reason}`,
+            );
             continue;
           }
           const msg = (result.value as any).data;
@@ -213,7 +215,9 @@ export class GmailService {
 
       await this.prisma.gmailAccount.update({
         where: { id: gmailAccountId },
-        data: { lastSyncedAt: new Date(), status: 'connected' },
+        // lastSyncedAt은 Gmail 수집이 아니라 AI/도메인 반영까지 성공한
+        // commit 시각을 뜻한다. 여기서는 OAuth 연결 상태만 확인한다.
+        data: { status: 'connected' },
       });
 
       if (skippedLargeMessages > 0) {
