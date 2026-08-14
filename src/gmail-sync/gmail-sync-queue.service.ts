@@ -313,6 +313,80 @@ export class GmailSyncQueueService {
     });
   }
 
+  async failJob(
+    jobId: string,
+    gmailAccountId: string,
+    workerId: string,
+    errorCode: string,
+  ): Promise<void> {
+    const now = new Date();
+    await this.prisma.$transaction(async (tx) => {
+      await tx.gmailSyncJob.updateMany({
+        where: { id: jobId, gmailAccountId, status: 'processing', leaseOwner: workerId },
+        data: {
+          status: 'dead',
+          completedAt: now,
+          leaseOwner: null,
+          leaseUntil: null,
+          lastErrorCode: errorCode.slice(0, 100),
+        },
+      });
+      await tx.gmailAccount.updateMany({
+        where: { id: gmailAccountId, syncLeaseOwner: workerId },
+        data: { syncLeaseOwner: null, syncLeaseUntil: null },
+      });
+    });
+  }
+
+  /**
+   * history cursor 404 또는 watch bootstrap 완료 시 계정 historyId를 새 값으로 리셋하고
+   * job을 completed로 마감한다. cursor/job 양쪽 CAS가 모두 통과해야 commit된다.
+   */
+  async commitCursorReset(input: {
+    jobId: string;
+    gmailAccountId: string;
+    workerId: string;
+    newHistoryId: string;
+  }): Promise<void> {
+    assertGmailHistoryId(input.newHistoryId);
+    const now = new Date();
+
+    await this.prisma.$transaction(async (tx) => {
+      const accountReset = await tx.gmailAccount.updateMany({
+        where: {
+          id: input.gmailAccountId,
+          syncLeaseOwner: input.workerId,
+          syncLeaseUntil: { gt: now },
+        },
+        data: { historyId: input.newHistoryId, syncLeaseOwner: null, syncLeaseUntil: null },
+      });
+      if (accountReset.count !== 1) {
+        throw new ConflictException(
+          'Gmail account lease가 만료되었거나 cursor reset이 불가합니다.',
+        );
+      }
+
+      const jobDone = await tx.gmailSyncJob.updateMany({
+        where: {
+          id: input.jobId,
+          gmailAccountId: input.gmailAccountId,
+          status: 'processing',
+          leaseOwner: input.workerId,
+        },
+        data: {
+          status: 'completed',
+          completedAt: now,
+          leaseOwner: null,
+          leaseUntil: null,
+          lastErrorCode: 'cursor_reset',
+        },
+      });
+      if (jobDone.count !== 1) {
+        throw new ConflictException('Gmail sync job lease가 유효하지 않습니다.');
+      }
+    });
+  }
+
   async retry(
     jobId: string,
     workerId: string,

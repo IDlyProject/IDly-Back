@@ -9,6 +9,7 @@ import { GmailSyncQueueService } from './gmail-sync-queue.service';
 import { GmailApiAdapter } from './gmail-api.adapter';
 import { GmailWatchService } from './gmail-watch.service';
 import { GmailSyncSchedulerService } from './gmail-sync-scheduler.service';
+import { GmailSyncWorkerService } from './gmail-sync-worker.service';
 
 @Module({
   imports: [JwtAuthModule],
@@ -21,6 +22,7 @@ import { GmailSyncSchedulerService } from './gmail-sync-scheduler.service';
     GmailApiAdapter,
     GmailWatchService,
     GmailSyncSchedulerService,
+    GmailSyncWorkerService,
   ],
   exports: [GmailSyncQueueService, GmailApiAdapter, GmailWatchService],
 })
