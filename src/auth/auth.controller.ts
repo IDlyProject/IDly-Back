@@ -105,9 +105,14 @@ export class AuthController {
 - **\`idly_token\` 쿠키 포함 후 호출** → 기존 유저에 서브 계정 추가 (\`isPrimary: false\`)
 
 **Google 인증 완료 후:**
-- access JWT → \`idly_token\` (단기)
-- refresh → \`idly_refresh\` (장기, /api/auth 경로)
-- \`{FRONTEND_URL}/auth/callback?mode={login|add}\` 로 리다이렉트
+- access JWT → \`idly_token\` 쿠키 (단기) + 리다이렉트 URL의 \`at\` 파라미터
+- refresh → \`idly_refresh\` 쿠키 (장기) + 리다이렉트 URL의 \`rt\` 파라미터
+- \`{FRONTEND_URL}/auth/callback?mode={login|add}&at={accessToken}&rt={refreshToken}\` 로 리다이렉트
+
+**모바일 대응 (iOS Safari 등 SameSite=None 쿠키 차단 환경)**
+- URL 파라미터 \`at\`, \`rt\`를 sessionStorage/localStorage에 저장 후 \`history.replaceState\`로 URL 정리
+- 이후 API 요청 시 \`Authorization: Bearer {at}\` 헤더로 전송
+- 토큰 만료 시 \`POST /auth/refresh\` body에 \`{ refreshToken: rt }\`로 갱신
     `.trim(),
   })
   @ApiResponse({ status: 302, description: 'Google OAuth 페이지로 리다이렉트' })
@@ -156,7 +161,12 @@ export class AuthController {
 
       this.setAuthCookies(res, accessToken, refreshToken);
 
-      res.redirect(`${frontendUrl}/auth/callback?mode=${mode}`);
+      // 모바일 브라우저(iOS Safari 등)는 cross-origin redirect 중 SameSite=None 쿠키를
+      // third-party로 간주해 차단. URL 파라미터로도 토큰 전달해 쿠키 없이도 동작하도록 함.
+      // 프론트: URL에 at/rt 있으면 sessionStorage/localStorage에 저장 후 replaceState로 URL 정리.
+      res.redirect(
+        `${frontendUrl}/auth/callback?mode=${mode}&at=${encodeURIComponent(accessToken)}&rt=${encodeURIComponent(refreshToken)}`,
+      );
     } catch (error) {
       const response = (error as any)?.getResponse?.();
       let errorCode = 'oauth_failed';
@@ -185,8 +195,12 @@ export class AuthController {
   @RateLimit({ limit: 30, windowMs: 60_000, key: 'ip' })
   @ApiOperation({
     summary: '액세스 토큰 갱신 (refresh 로테이션)',
-    description:
-      '바디 또는 `idly_refresh` 쿠키의 refresh 토큰으로 새 access/refresh 발급. 이전 refresh는 즉시 폐기.',
+    description: `\`idly_refresh\` 쿠키 또는 바디의 \`refreshToken\`으로 새 access/refresh 발급. 이전 refresh는 즉시 폐기.
+
+**모바일 사용법 (쿠키 없는 환경)**
+1. \`GET /auth/google\` 콜백 리다이렉트 URL의 \`rt\` 파라미터를 localStorage에 저장
+2. 만료 시 \`POST /auth/refresh\` body에 \`{ "refreshToken": "<rt값>" }\` 전송
+3. 응답의 \`accessToken\`, \`refreshToken\`으로 기존 값 갱신 (로테이션)`,
   })
   @ApiResponse({ status: 200, description: '갱신 성공' })
   @ApiResponse({ status: 401, description: '유효하지 않거나 재사용된 refresh' })
@@ -205,7 +219,8 @@ export class AuthController {
     const { accessToken, refreshToken } =
       await this.authService.rotateRefreshToken(raw);
     this.setAuthCookies(res, accessToken, refreshToken);
-    return { accessToken, expiresIn: this.config.get('JWT_EXPIRES_IN', '1h') };
+    // refreshToken을 body에도 포함 — 모바일에서 쿠키 없이 토큰 로테이션 가능
+    return { accessToken, refreshToken, expiresIn: this.config.get('JWT_EXPIRES_IN', '1h') };
   }
 
   @Post('logout')
