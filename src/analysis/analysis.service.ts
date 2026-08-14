@@ -321,6 +321,12 @@ export class AnalysisService implements OnModuleInit {
               : null,
         },
       });
+      this.logPipelineStep(
+        runId,
+        'completed',
+        100,
+        STEP_MESSAGES['completed'],
+      );
 
       // Solar snapshot은 비동기로 patch — 분석 완료 UX를 블로킹하지 않음
       setImmediate(() => {
@@ -430,18 +436,32 @@ export class AnalysisService implements OnModuleInit {
         completedAt: new Date(),
       },
     });
+    this.logPipelineStep(runId, 'failed', 0, STEP_MESSAGES['failed']);
   }
 
   private async updateStep(runId: string, step: string, progress: number, message?: string) {
+    const displayMessage = message ?? STEP_MESSAGES[step] ?? '';
     await this.prisma.analysisRun.update({
       where: { id: runId },
       data: {
         status: 'scanning',
         currentStep: step,
         progress,
-        displayMessage: message ?? STEP_MESSAGES[step],
+        displayMessage,
       },
     });
+    this.logPipelineStep(runId, step, progress, displayMessage);
+  }
+
+  private logPipelineStep(
+    runId: string,
+    step: string,
+    progress: number,
+    displayMessage: string,
+  ) {
+    this.logger.log(
+      `[runId=${runId}] step=${step} progress=${progress} message="${displayMessage}"`,
+    );
   }
 
   private async uploadMboxToAI(tmpPath: string): Promise<AiAnalyzeResponse> {
