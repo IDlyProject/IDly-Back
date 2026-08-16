@@ -43,12 +43,14 @@ export class WaitlistService {
   }
 
   async getStatus(phone: string) {
+    if (!phone) throw new BadRequestException('phone is required');
     const entry = await this.prisma.waitlist.findUnique({ where: { phone } });
     if (!entry) return { status: 'not_found' };
     return { status: entry.status };
   }
 
   async verifyToken(token: string) {
+    if (!token) throw new BadRequestException('token is required');
     const entry = await this.prisma.waitlist.findUnique({ where: { token } });
     if (!entry) {
       throw new NotFoundException({ errorCode: 'invalid_token' });
