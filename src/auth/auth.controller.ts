@@ -113,10 +113,13 @@ export class AuthController {
 - URL 파라미터 \`at\`, \`rt\`를 sessionStorage/localStorage에 저장 후 \`history.replaceState\`로 URL 정리
 - 이후 API 요청 시 \`Authorization: Bearer {at}\` 헤더로 전송
 - 토큰 만료 시 \`POST /auth/refresh\` body에 \`{ refreshToken: rt }\`로 갱신
+
+**\`error=refresh_token_missing\` 처리**
+콜백에서 이 에러를 받으면 Google이 refresh_token을 재발급하지 않은 것. \`GET /auth/google?reauth=true\`로 재시도하면 Google이 consent 화면을 강제로 띄워 refresh_token을 재발급합니다.
     `.trim(),
   })
   @ApiResponse({ status: 302, description: 'Google OAuth 페이지로 리다이렉트' })
-  async googleAuth(@Req() req: Request, @Res() res: Response) {
+  async googleAuth(@Req() req: Request, @Res() res: Response, @Query('reauth') reauth?: string) {
     const cookieToken = (req as any).cookies?.[this.ACCESS_COOKIE];
     const authHeader = req.headers.authorization as string | undefined;
     const rawToken = authHeader?.startsWith('Bearer ')
@@ -136,9 +139,10 @@ export class AuthController {
       }
     }
 
+    const forceConsent = reauth === 'true';
     const url = userId
       ? this.authService.getAddAccountUrl(userId)
-      : this.authService.getAuthUrl();
+      : this.authService.getAuthUrl(forceConsent);
 
     res.redirect(url);
   }
