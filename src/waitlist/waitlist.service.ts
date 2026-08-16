@@ -94,10 +94,8 @@ export class WaitlistService {
 
   private checkAdminSecret(authHeader: string | undefined) {
     const secret = this.config.get<string>('ADMIN_SECRET');
-    if (!secret) throw new Error('ADMIN_SECRET not configured');
-
     const provided = authHeader?.replace(/^Bearer\s+/i, '');
-    if (!provided || provided !== secret) {
+    if (!secret || !provided || provided !== secret) {
       throw new UnauthorizedException('invalid admin secret');
     }
   }
