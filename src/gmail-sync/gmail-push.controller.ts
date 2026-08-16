@@ -6,10 +6,12 @@ import {
   Post,
   UseGuards,
 } from '@nestjs/common';
+import { ApiExcludeController } from '@nestjs/swagger';
 import { GmailPushEnvelopeDto } from './dto/gmail-push.dto';
 import { GmailPushInboxService } from './gmail-push-inbox.service';
 import { GmailPushOidcGuard } from './gmail-push-oidc.guard';
 
+@ApiExcludeController()
 @Controller('gmail/push')
 export class GmailPushController {
   constructor(private readonly inbox: GmailPushInboxService) {}

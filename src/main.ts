@@ -102,6 +102,7 @@ async function bootstrap() {
       .addTag('4-2. 계정 관리', '연결된 Gmail 계정 목록 조회')
       .addTag('4-3. 탈퇴', '회원 탈퇴')
       .addTag('랜딩 | 베타 신청', '랜딩 페이지 — 베타 신청자 등록')
+      .addTag('Waitlist | 사전 등록', '사전 등록 · 승인 토큰 발급')
       .build();
 
     const document = SwaggerModule.createDocument(app, config);
@@ -118,6 +119,7 @@ async function bootstrap() {
       '4-2. 계정 관리',
       '4-3. 탈퇴',
       '랜딩 | 베타 신청',
+      'Waitlist | 사전 등록',
     ]);
     for (const pathItem of Object.values(document.paths ?? {})) {
       for (const op of Object.values(pathItem as Record<string, any>)) {

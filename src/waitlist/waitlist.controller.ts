@@ -16,12 +16,12 @@ import { CreateWaitlistDto } from './dto/create-waitlist.dto';
 import { WaitlistService } from './waitlist.service';
 
 @ApiTags('Waitlist | 사전 등록')
-@Controller()
+@Controller('waitlist')
 @UseGuards(RateLimitGuard)
 export class WaitlistController {
   constructor(private readonly waitlistService: WaitlistService) {}
 
-  @Post('waitlist')
+  @Post()
   @HttpCode(201)
   @RateLimit({ limit: 5, windowMs: 60 * 60 * 1000, key: 'ip' })
   @ApiOperation({ summary: '사전 등록' })
@@ -31,7 +31,7 @@ export class WaitlistController {
     return this.waitlistService.register(dto);
   }
 
-  @Get('waitlist/status')
+  @Get('status')
   @RateLimit({ limit: 20, windowMs: 60 * 60 * 1000, key: 'ip' })
   @ApiOperation({ summary: '등록 상태 조회' })
   @ApiResponse({ status: 200, description: 'pending | approved | not_found' })
@@ -39,7 +39,7 @@ export class WaitlistController {
     return this.waitlistService.getStatus(phone);
   }
 
-  @Get('waitlist/verify')
+  @Get('verify')
   @RateLimit({ limit: 20, windowMs: 60 * 60 * 1000, key: 'ip' })
   @ApiOperation({
     summary: '알림톡 토큰 검증',
@@ -54,8 +54,15 @@ export class WaitlistController {
   verifyToken(@Query('token') token: string) {
     return this.waitlistService.verifyToken(token);
   }
+}
 
-  @Post('admin/waitlist/approve')
+@ApiTags('Waitlist | 사전 등록')
+@Controller('admin/waitlist')
+@UseGuards(RateLimitGuard)
+export class AdminWaitlistController {
+  constructor(private readonly waitlistService: WaitlistService) {}
+
+  @Post('approve')
   @HttpCode(200)
   @ApiOperation({ summary: '[Admin] 대기자 승인 + 알림톡 발송' })
   @ApiHeader({ name: 'Authorization', description: 'Bearer <ADMIN_SECRET>' })
