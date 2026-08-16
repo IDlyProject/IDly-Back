@@ -36,10 +36,10 @@ export class AuthService {
   /** 화면 01 — 로그인용 OAuth URL
    * select_account: 기존 유저는 동의 화면 없이 계정 선택만, 신규 유저는 Google이 자동으로 consent 표시
    */
-  getAuthUrl(): string {
+  getAuthUrl(forceConsent = false): string {
     return this.oauth2Client.generateAuthUrl({
       access_type: 'offline',
-      prompt: 'select_account',
+      prompt: forceConsent ? 'consent' : 'select_account',
       scope: this.SCOPES,
     });
   }

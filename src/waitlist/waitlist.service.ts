@@ -43,12 +43,14 @@ export class WaitlistService {
   }
 
   async getStatus(phone: string) {
+    if (!phone) throw new BadRequestException('phone is required');
     const entry = await this.prisma.waitlist.findUnique({ where: { phone } });
     if (!entry) return { status: 'not_found' };
     return { status: entry.status };
   }
 
   async verifyToken(token: string) {
+    if (!token) throw new BadRequestException('token is required');
     const entry = await this.prisma.waitlist.findUnique({ where: { token } });
     if (!entry) {
       throw new NotFoundException({ errorCode: 'invalid_token' });
@@ -92,10 +94,8 @@ export class WaitlistService {
 
   private checkAdminSecret(authHeader: string | undefined) {
     const secret = this.config.get<string>('ADMIN_SECRET');
-    if (!secret) throw new Error('ADMIN_SECRET not configured');
-
     const provided = authHeader?.replace(/^Bearer\s+/i, '');
-    if (!provided || provided !== secret) {
+    if (!secret || !provided || provided !== secret) {
       throw new UnauthorizedException('invalid admin secret');
     }
   }

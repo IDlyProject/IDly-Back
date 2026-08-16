@@ -14,6 +14,7 @@ import { SummaryModule } from './summary/summary.module';
 // import { ReportModule } from './report/report.module';
 import { SecurityChatModule } from './security-chat/security-chat.module';
 import { GmailSyncModule } from './gmail-sync/gmail-sync.module';
+import { FeedbackModule } from './feedback/feedback.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { HealthController } from './health.controller';
 
@@ -34,6 +35,7 @@ import { HealthController } from './health.controller';
     // ReportModule,
     SecurityChatModule,
     GmailSyncModule,
+    FeedbackModule,
   ],
   controllers: [HealthController],
 })

@@ -6,9 +6,11 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common';
+import { ApiExcludeController } from '@nestjs/swagger';
 import { JwtGuard } from '../auth/jwt.guard';
 import { GmailSyncQueueService } from './gmail-sync-queue.service';
 
+@ApiExcludeController()
 @UseGuards(JwtGuard)
 @Controller('gmail-sync')
 export class GmailSyncController {
