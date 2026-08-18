@@ -2,3 +2,7 @@ node_modules
 .env
 dist/
 /generated/prisma
+
+# 로컬 전용 DB 조작 스크립트 (DB 접속정보 포함 · 유저 삭제 등 파괴적 작업)
+scripts/db_reset_test.mjs
+src/scripts/
