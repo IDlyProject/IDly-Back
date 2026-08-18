@@ -14,9 +14,10 @@ import { GmailSyncSchedulerService } from './gmail-sync-scheduler.service';
 import { GmailSyncWorkerService } from './gmail-sync-worker.service';
 import { GmailIncrementalProcessorService } from './gmail-incremental-processor.service';
 import { GMAIL_INCREMENTAL_PROCESSOR } from './gmail-incremental-processor';
+import { NotificationModule } from '../notification/notification.module';
 
 @Module({
-  imports: [JwtAuthModule, GmailModule, AnalysisModule],
+  imports: [NotificationModule, JwtAuthModule, GmailModule, AnalysisModule],
   controllers: [GmailPushController, GmailSyncController],
   providers: [
     GmailPushInboxService,

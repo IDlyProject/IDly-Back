@@ -46,15 +46,23 @@ import {
   toRiskLevel,
   type RiskType,
 } from './ai-risk-mapping';
+import { NotificationService } from '../notification/notification.service';
+
+/** 증분 분석에서 새로 확인된 위험 — Gmail push 실시간 알림에 사용한다. */
+export type NewRiskAlert = {
+  serviceAccountId: string;
+  serviceName: string;
+  riskType: RiskType;
+};
 
 const STEP_MESSAGES: Record<string, string> = {
-  waiting: '분석을 준비하고 있어요.',
+  waiting: '분석을 준비하고 있어요. 시간이 걸리니 나가셔도 괜찮아요.',
   fetching_mails: '메일을 불러오고 있어요.',
-  finding_security: '보안 관련 메일을 찾고 있어요.',
+  finding_security: '보안 관련 메일을 찾고 있어요. 나가셔도 분석은 계속돼요.',
   grouping_accounts: '계정별로 묶고 있어요.',
   assessing_risks: '위험도를 판단하고 있어요.',
   preparing_actions: '필요한 조치를 정리하고 있어요.',
-  completed: '메일 원문은 저장하지 않고 분석 결과만 정리했어요.',
+  completed: '분석이 끝났어요. 메일 원문은 저장하지 않고 결과만 정리했어요.',
   failed: '분석을 완료하지 못했어요. 잠시 후 다시 시도해 주세요.',
 };
 
@@ -68,6 +76,7 @@ export class AnalysisService implements OnModuleInit {
     private readonly httpService: HttpService,
     private readonly config: ConfigService,
     private readonly solarService: SolarService,
+    private readonly notification: NotificationService,
   ) {}
 
   async onModuleInit() {
@@ -364,6 +373,16 @@ export class AnalysisService implements OnModuleInit {
         STEP_MESSAGES['completed'],
       );
 
+      // 분석 완료 알림톡 — 앱을 나간 사용자에게 결과 준비를 알린다.
+      // 발송 실패가 분석 결과에 영향을 주지 않도록 비동기 + catch 처리.
+      setImmediate(() => {
+        this.notification
+          .sendAnalysisDone(userId)
+          .catch((e) =>
+            this.logger.error(`[runId=${runId}] 분석 완료 알림톡 실패: ${e}`),
+          );
+      });
+
       // Solar snapshot은 비동기로 patch — 분석 완료 UX를 블로킹하지 않음
       setImmediate(() => {
         this.buildAndPatchSnapshot(runId, userId).catch((e) =>
@@ -526,7 +545,10 @@ export class AnalysisService implements OnModuleInit {
     runId: string | null,
     result: AiAnalyzeResponse,
     lastEmailDate: Date | null,
-  ) {
+  ): Promise<NewRiskAlert[]> {
+    /** 이번 저장에서 새 증거와 함께 위험이 확인된 계정 — 실시간 알림 대상 */
+    const newRiskAlerts: NewRiskAlert[] = [];
+
     for (const ai of result?.accounts ?? []) {
       const accountName = ai.account ?? 'Unknown';
       const mails = ai.problem_mails ?? [];
@@ -649,6 +671,15 @@ export class AnalysisService implements OnModuleInit {
         },
       });
 
+      // 이미 알고 있던 위험은 다시 알리지 않는다 — 새 증거가 있을 때만 대상에 넣는다.
+      if (hasNewEvidence && riskLevel !== 'safe' && primaryRiskType) {
+        newRiskAlerts.push({
+          serviceAccountId: sa.id,
+          serviceName: registry.serviceName,
+          riskType: primaryRiskType,
+        });
+      }
+
       for (const evidence of evidenceInputs) {
         await this.prisma.riskEvidence.upsert({
           where: {
@@ -733,6 +764,8 @@ export class AnalysisService implements OnModuleInit {
         data: { lastSyncedAt: new Date(), lastEmailReceivedAt: lastEmailDate },
       });
     }
+
+    return newRiskAlerts;
   }
 
   /**
@@ -744,9 +777,9 @@ export class AnalysisService implements OnModuleInit {
     gmailAccountId: string,
     tmpMboxPath: string,
     lastEmailDate: Date | null,
-  ): Promise<void> {
+  ): Promise<NewRiskAlert[]> {
     const result = await this.uploadMboxToAI(tmpMboxPath);
-    await this.saveResults(gmailAccountId, null, result, lastEmailDate);
+    return this.saveResults(gmailAccountId, null, result, lastEmailDate);
   }
 
   // ─── 분류 (순수 로직: ai-risk-mapping / domain/status) ─────────────────────
