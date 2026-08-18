@@ -13,6 +13,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import {
+  ApiBearerAuth,
   ApiExcludeEndpoint,
   ApiOperation,
   ApiProperty,
@@ -25,6 +26,7 @@ import { AuthService } from './auth.service';
 import { ConfigService } from '@nestjs/config';
 import { RateLimit } from '../common/guards/rate-limit.decorator';
 import { RateLimitGuard } from '../common/guards/rate-limit.guard';
+import { JwtGuard } from './jwt.guard';
 
 class RefreshDto {
   @ApiProperty({
@@ -145,6 +147,47 @@ export class AuthController {
       : this.authService.getAuthUrl(forceConsent);
 
     res.redirect(url);
+  }
+
+  @Post('add-account/start')
+  @UseGuards(JwtGuard)
+  @ApiBearerAuth()
+  @HttpCode(200)
+  @RateLimit({ limit: 10, windowMs: 60_000, key: 'ip' })
+  @ApiOperation({
+    summary: '연결 계정 추가 시작 — OAuth URL 발급',
+    description: `**화면 05 · 연결 계정 추가(1-2-5)**
+
+\`GET /auth/google\`은 리다이렉트라 \`Authorization\` 헤더를 실을 수 없어서
+\`idly_token\` 쿠키로만 로그인 여부를 판별합니다. 그런데 이 쿠키는 프로덕션에서
+\`SameSite=None\` 크로스 사이트 쿠키라 **시크릿창·카카오톡 인앱 브라우저·iOS
+Safari ITP 환경에서 전송되지 않고**, 그 경우 기존 유저에 계정이 붙는 대신
+**신규 유저가 생성됩니다.**
+
+이 엔드포인트는 그 분기를 없앱니다. 프론트가 Bearer 토큰으로 호출해 URL을 받고,
+그 URL로 이동하면 됩니다. 유저 식별자는 응답 URL의 서명된 \`state\`에 담기므로
+이후 콜백 처리에 쿠키가 필요 없습니다.
+
+\`\`\`js
+const { data } = await axiosInstance.post('/api/auth/add-account/start');
+window.location.href = data.url;
+\`\`\`
+
+토큰이 URL 쿼리에 노출되지 않습니다.`,
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Google OAuth URL',
+    schema: {
+      example: {
+        url: 'https://accounts.google.com/o/oauth2/v2/auth?...&state=eyJhbGci...',
+      },
+    },
+  })
+  @ApiResponse({ status: 401, description: '로그인이 필요합니다.' })
+  startAddAccount(@Req() req: Request): { url: string } {
+    const userId = (req as unknown as { user: { sub: string } }).user.sub;
+    return { url: this.authService.getAddAccountUrl(userId) };
   }
 
   @Get('google/callback')
