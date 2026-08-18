@@ -7,13 +7,13 @@ export type AlimtalkTemplate =
   | 'waitlist_approval'
   | 'analysis_done'
   | 'security_alert'
-  | 'weekly_report';
+  | 'weekly_status';
 
 const TEMPLATE_ENV_KEY: Record<AlimtalkTemplate, string> = {
   waitlist_approval: 'SOLAPI_TEMPLATE_ID',
   analysis_done: 'SOLAPI_TEMPLATE_ANALYSIS_DONE',
   security_alert: 'SOLAPI_TEMPLATE_SECURITY_ALERT',
-  weekly_report: 'SOLAPI_TEMPLATE_WEEKLY_REPORT',
+  weekly_status: 'SOLAPI_TEMPLATE_WEEKLY_STATUS',
 };
 
 /**

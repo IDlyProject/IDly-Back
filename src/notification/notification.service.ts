@@ -110,10 +110,14 @@ export class NotificationService {
   }
 
   /**
-   * 3) 주간 리포트 알림 — 스케줄러가 호출한다.
+   * 3) 주간 계정 상태 알림 — 스케줄러가 호출한다.
+   *
+   * 링크는 홈으로 보낸다. 피봇 이후 별도 리포트 화면이 없고 홈이 그 역할을
+   * 겸하기 때문이다. 알림톡 문구도 "리포트"가 아니라 계정 상태 확인을
+   * 유도하는 쪽으로 맞춘다 (예: "이번 주 계정 상태를 확인해보세요").
    * @returns 발송 대상 수와 실제 발송 시도 수
    */
-  async sendWeeklyReportReminders(): Promise<{ targets: number; sent: number }> {
+  async sendWeeklyStatusReminders(): Promise<{ targets: number; sent: number }> {
     const users = await this.prisma.user.findMany({
       where: {
         phone: { not: null },
@@ -127,7 +131,7 @@ export class NotificationService {
     for (const user of users) {
       if (!user.phone) continue;
       const result = await this.alimtalk.send({
-        template: 'weekly_report',
+        template: 'weekly_status',
         phone: user.phone,
         variables: {
           '#{name}': user.nickname ?? user.name ?? '고객',
@@ -137,7 +141,7 @@ export class NotificationService {
       if (result !== 'failed') sent += 1;
     }
 
-    this.logger.log(`[weekly-report] 대상 ${users.length}명 중 ${sent}명 발송`);
+    this.logger.log(`[weekly-status] 대상 ${users.length}명 중 ${sent}명 발송`);
     return { targets: users.length, sent };
   }
 }

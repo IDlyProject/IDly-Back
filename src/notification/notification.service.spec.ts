@@ -104,13 +104,13 @@ describe('NotificationService', () => {
     });
   });
 
-  describe('주간 리포트 알림', () => {
+  describe('주간 계정 상태 알림', () => {
     it('대상 유저 전원에게 발송하고 건수를 집계한다', async () => {
       findMany.mockResolvedValue([
         { id: 'u1', name: 'A', nickname: null, phone: '01011112222' },
         { id: 'u2', name: 'B', nickname: '비', phone: '01033334444' },
       ]);
-      const result = await service.sendWeeklyReportReminders();
+      const result = await service.sendWeeklyStatusReminders();
       expect(send).toHaveBeenCalledTimes(2);
       expect(result).toEqual({ targets: 2, sent: 2 });
     });
@@ -120,13 +120,13 @@ describe('NotificationService', () => {
         { id: 'u1', name: 'A', nickname: null, phone: '01011112222' },
       ]);
       send.mockResolvedValue('failed');
-      const result = await service.sendWeeklyReportReminders();
+      const result = await service.sendWeeklyStatusReminders();
       expect(result).toEqual({ targets: 1, sent: 0 });
     });
 
     it('온보딩 완료·수신 동의·전화번호 보유 유저만 조회한다', async () => {
       findMany.mockResolvedValue([]);
-      await service.sendWeeklyReportReminders();
+      await service.sendWeeklyStatusReminders();
       expect(findMany.mock.calls[0][0].where).toEqual({
         phone: { not: null },
         notificationAgreed: true,
