@@ -8,6 +8,8 @@ import {
   GMAIL_INCREMENTAL_PROCESSOR,
   GmailIncrementalProcessor,
 } from './gmail-incremental-processor';
+import { NotificationService } from '../notification/notification.service';
+import type { NewRiskAlert } from '../analysis/analysis.service';
 
 @Injectable()
 export class GmailIncrementalProcessorService
@@ -19,6 +21,7 @@ export class GmailIncrementalProcessorService
     private readonly gmailService: GmailService,
     private readonly analysisService: AnalysisService,
     private readonly prisma: PrismaService,
+    private readonly notification: NotificationService,
   ) {}
 
   async process(input: {
@@ -40,8 +43,9 @@ export class GmailIncrementalProcessorService
     const { tmpPath, lastEmailDate } =
       await this.gmailService.fetchMessagesByIdsAsMbox(gmailAccountId, newIds);
 
+    let newRisks: NewRiskAlert[] = [];
     try {
-      await this.analysisService.analyzeAndSaveIncremental(
+      newRisks = await this.analysisService.analyzeAndSaveIncremental(
         gmailAccountId,
         tmpPath,
         lastEmailDate,
@@ -52,6 +56,41 @@ export class GmailIncrementalProcessorService
 
     await this.markProcessed(gmailAccountId, newIds);
     this.logger.log(`[gmailAccountId=${gmailAccountId}] 증분 분석 완료`);
+
+    // 새로 확인된 보안 위험은 즉시 알림톡으로 알린다.
+    // 알림 발송 실패가 동기화 커서 전진을 막지 않도록 여기서 삼킨다.
+    if (newRisks.length > 0) {
+      await this.notifyNewRisks(gmailAccountId, newRisks);
+    }
+  }
+
+  /** 새 위험 알림 발송 — 실패해도 동기화 흐름에 영향을 주지 않는다. */
+  private async notifyNewRisks(
+    gmailAccountId: string,
+    risks: NewRiskAlert[],
+  ): Promise<void> {
+    const account = await this.prisma.gmailAccount.findUnique({
+      where: { id: gmailAccountId },
+      select: { userId: true },
+    });
+    if (!account) return;
+
+    for (const risk of risks) {
+      try {
+        await this.notification.sendSecurityAlert({
+          userId: account.userId,
+          serviceName: risk.serviceName,
+          riskType: risk.riskType,
+          serviceAccountId: risk.serviceAccountId,
+        });
+      } catch (e) {
+        this.logger.error(
+          `[gmailAccountId=${gmailAccountId}] 보안 알림 발송 실패 (${risk.serviceName}): ${
+            e instanceof Error ? e.message : e
+          }`,
+        );
+      }
+    }
   }
 
   private async filterUnprocessed(
