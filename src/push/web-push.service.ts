@@ -60,7 +60,7 @@ export class WebPushService {
       return { sent: 0, removed: 0 };
     }
 
-    let sent = 0;
+    const delivered: string[] = [];
     const expired: string[] = [];
 
     for (const sub of subscriptions) {
@@ -72,7 +72,7 @@ export class WebPushService {
           },
           JSON.stringify(payload),
         );
-        sent += 1;
+        delivered.push(sub.id);
       } catch (e) {
         const status = (e as { statusCode?: number }).statusCode;
         if (status === 404 || status === 410) {
@@ -93,16 +93,18 @@ export class WebPushService {
       });
     }
 
-    if (sent > 0) {
+    // 실제로 전달된 구독만 갱신한다. 실패·만료까지 함께 찍으면 마지막 발송
+    // 시각이 사실과 달라져, 나중에 죽은 구독을 골라낼 근거가 사라진다.
+    if (delivered.length > 0) {
       await this.prisma.pushSubscription.updateMany({
-        where: { id: { in: subscriptions.map((s) => s.id) } },
+        where: { id: { in: delivered } },
         data: { lastSentAt: new Date() },
       });
     }
 
     this.logger.log(
-      `[push] 발송 ${sent}/${subscriptions.length}건, 만료 구독 ${expired.length}건 정리`,
+      `[push] 발송 ${delivered.length}/${subscriptions.length}건, 만료 구독 ${expired.length}건 정리`,
     );
-    return { sent, removed: expired.length };
+    return { sent: delivered.length, removed: expired.length };
   }
 }
