@@ -46,7 +46,7 @@ export const GMAIL_ACCOUNT_STATUSES = [
 export type GmailAccountStatus = (typeof GMAIL_ACCOUNT_STATUSES)[number];
 
 /** Stale analysis runs older than this are marked failed on recovery. */
-export const ANALYSIS_ORPHAN_TTL_MS = 30 * 60 * 1000; // 30 minutes
+export const ANALYSIS_ORPHAN_TTL_MS = 60 * 60 * 1000; // 60 minutes
 
 /**
  * 동일 유저 연속 분석 시작 최소 간격.

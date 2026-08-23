@@ -34,3 +34,5 @@ services:
         sync: false
       - key: AI_SERVER_URL
         sync: false
+      - key: AI_ANALYSIS_TIMEOUT_MS
+        value: "900000"

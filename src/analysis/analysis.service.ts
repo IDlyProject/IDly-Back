@@ -58,6 +58,8 @@ const STEP_MESSAGES: Record<string, string> = {
   failed: '분석을 완료하지 못했어요. 잠시 후 다시 시도해 주세요.',
 };
 
+const DEFAULT_AI_ANALYSIS_TIMEOUT_MS = 15 * 60 * 1000;
+
 @Injectable()
 export class AnalysisService implements OnModuleInit {
   private readonly logger = new Logger(AnalysisService.name);
@@ -502,6 +504,13 @@ export class AnalysisService implements OnModuleInit {
 
   private async uploadMboxToAI(tmpPath: string): Promise<AiAnalyzeResponse> {
     const aiUrl = this.config.get('AI_SERVER_URL', 'http://localhost:8000');
+    const configuredTimeout = Number(
+      this.config.get<string>('AI_ANALYSIS_TIMEOUT_MS'),
+    );
+    const timeout =
+      Number.isFinite(configuredTimeout) && configuredTimeout > 0
+        ? configuredTimeout
+        : DEFAULT_AI_ANALYSIS_TIMEOUT_MS;
     const form = new FormData();
     form.append('file', createReadStream(tmpPath), {
       filename: 'analysis.mbox',
@@ -512,7 +521,7 @@ export class AnalysisService implements OnModuleInit {
       firstValueFrom(
         this.httpService.post(`${aiUrl}/analyze`, form, {
           headers: form.getHeaders(),
-          timeout: 300_000,
+          timeout,
         }),
       ),
     );
