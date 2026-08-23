@@ -27,7 +27,7 @@ export class CreateWaitlistDto {
   @ApiProperty({ example: ['abc@gmail.com'], type: [String] })
   @IsArray()
   @ArrayMinSize(1)
-  @ArrayMaxSize(5)
+  @ArrayMaxSize(3)
   @IsEmail({}, { each: true })
   emails: string[];
 

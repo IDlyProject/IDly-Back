@@ -40,4 +40,22 @@ describe('CreateWaitlistDto 동의 검증', () => {
     void privacyAgreed;
     expect((await messagesOf(withoutConsents)).length).toBeGreaterThan(0);
   });
+
+  it('분석할 이메일은 최대 3개까지 허용한다', async () => {
+    expect(
+      await messagesOf({
+        ...base,
+        emails: ['a@gmail.com', 'b@gmail.com', 'c@gmail.com'],
+      }),
+    ).toHaveLength(0);
+
+    expect(
+      (
+        await messagesOf({
+          ...base,
+          emails: ['a@gmail.com', 'b@gmail.com', 'c@gmail.com', 'd@gmail.com'],
+        })
+      ).length,
+    ).toBeGreaterThan(0);
+  });
 });
