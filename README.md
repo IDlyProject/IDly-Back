@@ -207,6 +207,7 @@ npm run start:dev
 | `REFRESH_TOKEN_DAYS` | app refresh token 만료 일수 |
 | `REFRESH_TOKEN_SECRET` | Gmail OAuth refresh token 암호화 키 |
 | `AI_SERVER_URL` | AI 분석 서버 base URL |
+| `AI_ANALYSIS_TIMEOUT_MS` | AI 분석 HTTP timeout(ms), 기본값 900000(15분) |
 | `SOLAR_API_KEY` | Upstage Solar API key |
 | `ENABLE_SWAGGER` | production Swagger 노출 여부 |
 | `GMAIL_FETCH_BATCH_SIZE` | Gmail raw message fetch 동시 처리 크기. 메모리 보호를 위해 기본값은 보수적으로 운용 |
