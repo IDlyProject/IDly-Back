@@ -2,23 +2,26 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  Logger,
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { randomBytes } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
-import { SolapiService } from './solapi.service';
 import { CreateWaitlistDto } from './dto/create-waitlist.dto';
 import { ApproveWaitlistDto } from './dto/approve-waitlist.dto';
+import { PushService } from '../push/push.service';
 
 const TOKEN_EXPIRY_DAYS = 7;
 
 @Injectable()
 export class WaitlistService {
+  private readonly logger = new Logger(WaitlistService.name);
+
   constructor(
     private readonly prisma: PrismaService,
-    private readonly solapi: SolapiService,
+    private readonly pushService: PushService,
     private readonly config: ConfigService,
   ) {}
 
@@ -86,11 +89,17 @@ export class WaitlistService {
       data: { status: 'approved', token, tokenCreatedAt: new Date() },
     });
 
-    await this.solapi.sendApprovalAlimtalk({
-      name: entry.name,
-      phone: entry.phone,
-      token,
-    });
+    // 승인 알림은 웹 푸시로 보낸다. 발송이 실패해도 승인 자체는 이미 끝났으므로
+    // 되돌리지 않고 로그만 남긴다.
+    await this.pushService
+      .notifyWaitlistApproved(entry.id)
+      .catch((e) =>
+        this.logger.error(
+          `[waitlist] 승인 푸시 발송 실패 (id=${entry.id}): ${
+            e instanceof Error ? e.message : e
+          }`,
+        ),
+      );
 
     return { ok: true, token };
   }

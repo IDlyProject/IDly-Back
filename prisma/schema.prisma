@@ -31,10 +31,11 @@ model User {
   lastLoginAt         DateTime?
   createdAt           DateTime  @default(now())
 
-  gmailAccounts GmailAccount[]
-  analysisRuns  AnalysisRun[]
-  securityChat  SecurityChat?
-  refreshTokens AuthRefreshToken[]
+  gmailAccounts     GmailAccount[]
+  analysisRuns      AnalysisRun[]
+  securityChat      SecurityChat?
+  refreshTokens     AuthRefreshToken[]
+  pushSubscriptions PushSubscription[]
 }
 
 /// 앱 로그인 refresh 토큰 (로테이션·즉시 폐기용). Gmail OAuth refreshToken 과 별개.
@@ -348,6 +349,32 @@ model Waitlist {
   ageOver14Agreed Boolean   @default(false)
   privacyAgreed   Boolean   @default(false)
   agreedAt        DateTime?
+
+  pushSubscriptions PushSubscription[]
+}
+
+/// 웹 푸시 구독. 기기 단위로 하나씩 생기며 endpoint가 그 기기의 고유 주소다.
+///
+/// 사전등록 단계에서는 아직 계정이 없어 waitlist에 묶고, 이후 로그인하면
+/// 같은 구독에 userId를 채워 이어서 쓴다. 재구독을 요구하면 알림 권한을
+/// 다시 물어야 하는데, 한 번 허용한 사용자에게 다시 묻는 건 어색하다.
+model PushSubscription {
+  id       String @id @default(cuid())
+  endpoint String @unique
+  p256dh   String
+  auth     String
+
+  waitlistId String?
+  waitlist   Waitlist? @relation(fields: [waitlistId], references: [id], onDelete: Cascade)
+
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt  DateTime  @default(now())
+  lastSentAt DateTime?
+
+  @@index([waitlistId])
+  @@index([userId])
 }
 
 // IDly-apps-in-toss 서비스에서 사용하는 테이블 — 직접 수정 금지

@@ -33,8 +33,21 @@ export class WaitlistController {
 
   @Get('status')
   @RateLimit({ limit: 20, windowMs: 60 * 60 * 1000, key: 'ip' })
-  @ApiOperation({ summary: '등록 상태 조회' })
-  @ApiResponse({ status: 200, description: 'pending | approved | not_found' })
+  @ApiOperation({
+    summary: '등록 상태 조회 — 승인 여부 확인의 기본 경로',
+    description: `사전등록 시 저장해둔 전화번호(\`localStorage\`의 \`waitlist_phone\`)로 조회합니다.
+
+**\`approved\`면 로그인 화면으로 보내면 됩니다.** 접근 토큰은 필요 없습니다.
+실제 접근 통제는 Google Cloud OAuth 테스트 사용자 목록에서 이뤄지므로, 목록에 없는
+계정은 구글이 로그인 단계에서 막습니다.
+
+\`GET /waitlist/verify\`의 토큰 방식은 알림톡 링크로 진입하던 시절의 경로입니다.
+알림 채널이 웹 푸시로 바뀌면서 푸시에는 토큰을 담지 않으므로, 승인 확인은 이
+엔드포인트를 쓰세요.
+
+상태값은 \`pending\` · \`approved\` · \`not_found\` 세 가지입니다.`,
+  })
+  @ApiResponse({ status: 200, schema: { example: { status: 'approved' } } })
   getStatus(@Query('phone') phone: string) {
     return this.waitlistService.getStatus(phone);
   }
