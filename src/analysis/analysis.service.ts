@@ -48,13 +48,13 @@ import {
 } from './ai-risk-mapping';
 
 const STEP_MESSAGES: Record<string, string> = {
-  waiting: '분석을 준비하고 있어요.',
+  waiting: '분석을 준비하고 있어요. 시간이 걸리니 나가셔도 괜찮아요.',
   fetching_mails: '메일을 불러오고 있어요.',
-  finding_security: '보안 관련 메일을 찾고 있어요.',
+  finding_security: '보안 관련 메일을 찾고 있어요. 나가셔도 분석은 계속돼요.',
   grouping_accounts: '계정별로 묶고 있어요.',
   assessing_risks: '위험도를 판단하고 있어요.',
   preparing_actions: '필요한 조치를 정리하고 있어요.',
-  completed: '메일 원문은 저장하지 않고 분석 결과만 정리했어요.',
+  completed: '분석이 끝났어요. 메일 원문은 저장하지 않고 결과만 정리했어요.',
   failed: '분석을 완료하지 못했어요. 잠시 후 다시 시도해 주세요.',
 };
 

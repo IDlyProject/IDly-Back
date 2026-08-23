@@ -36,6 +36,9 @@ export class WaitlistService {
         name: dto.name,
         phone: dto.phone,
         emails: dto.emails,
+        ageOver14Agreed: dto.ageOver14Agreed,
+        privacyAgreed: dto.privacyAgreed,
+        agreedAt: new Date(),
       },
     });
 
