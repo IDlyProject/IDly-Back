@@ -18,23 +18,23 @@ model User {
   marketingAgreed       Boolean   @default(false)
 
   // 알림 설정 — 보안 알림
-  alertSuspiciousLogin  Boolean   @default(true)
-  alertPasswordChange   Boolean   @default(true)
-  alertNewDevice        Boolean   @default(true)
-  alertRecoveryEmail    Boolean   @default(true)
+  alertSuspiciousLogin Boolean @default(true)
+  alertPasswordChange  Boolean @default(true)
+  alertNewDevice       Boolean @default(true)
+  alertRecoveryEmail   Boolean @default(true)
 
   // 알림 설정 — 마케팅
-  alertSecurityTip      Boolean   @default(false)
-  alertEventPromo       Boolean   @default(false)
+  alertSecurityTip Boolean @default(false)
+  alertEventPromo  Boolean @default(false)
 
-  onboardingCompleted   Boolean   @default(false)
-  lastLoginAt           DateTime?
-  createdAt             DateTime  @default(now())
+  onboardingCompleted Boolean   @default(false)
+  lastLoginAt         DateTime?
+  createdAt           DateTime  @default(now())
 
-  gmailAccounts  GmailAccount[]
-  analysisRuns   AnalysisRun[]
-  securityChat   SecurityChat?
-  refreshTokens  AuthRefreshToken[]
+  gmailAccounts GmailAccount[]
+  analysisRuns  AnalysisRun[]
+  securityChat  SecurityChat?
+  refreshTokens AuthRefreshToken[]
 }
 
 /// 앱 로그인 refresh 토큰 (로테이션·즉시 폐기용). Gmail OAuth refreshToken 과 별개.
@@ -158,10 +158,10 @@ model AnalysisRun {
   progress       Int       @default(0)
   currentStep    String    @default("waiting") // waiting | checking_connected_mail | collecting_account_signals | preparing_home | completed | failed
   displayMessage String?
-  failedReason    String?
-  reportSnapshot  Json?
-  startedAt       DateTime  @default(now())
-  completedAt     DateTime?
+  failedReason   String?
+  reportSnapshot Json?
+  startedAt      DateTime  @default(now())
+  completedAt    DateTime?
 
   user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   serviceAccounts ServiceAccount[]
@@ -193,11 +193,11 @@ model ServiceAccount {
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
-  gmailAccount    GmailAccount    @relation(fields: [gmailAccountId], references: [id], onDelete: Cascade)
-  analysisRun     AnalysisRun?    @relation(fields: [analysisRunId], references: [id])
-  riskEvidences   RiskEvidence[]
-  actionItems     ActionItem[]
-  actionSessions  ActionSession[]
+  gmailAccount   GmailAccount    @relation(fields: [gmailAccountId], references: [id], onDelete: Cascade)
+  analysisRun    AnalysisRun?    @relation(fields: [analysisRunId], references: [id])
+  riskEvidences  RiskEvidence[]
+  actionItems    ActionItem[]
+  actionSessions ActionSession[]
 
   @@unique([gmailAccountId, serviceName])
   @@index([gmailAccountId, status])
@@ -255,17 +255,17 @@ model ActionSession {
   serviceAccount ServiceAccount  @relation(fields: [serviceAccountId], references: [id], onDelete: Cascade)
   messages       ActionMessage[]
   attempts       ActionAttempt[]
-
-  @@index([serviceAccountId, status])
   // Partial unique: 서비스 계정당 active 세션 1개 — SQL migration에서 생성
   // CREATE UNIQUE INDEX "ActionSession_one_active_per_sa" ON "ActionSession"("serviceAccountId") WHERE status = 'active';
+
+  @@index([serviceAccountId, status])
 }
 
 model ActionMessage {
   id        String   @id @default(uuid())
   sessionId String
-  role      String   // assistant | user
-  type      String   // text | risk_intro | action_list | user_chip | official_link | tip | card_news | feedback_actions | celebration | exit_cta
+  role      String // assistant | user
+  type      String // text | risk_intro | action_list | user_chip | official_link | tip | card_news | feedback_actions | celebration | exit_cta
   content   String
   metadata  Json?
   createdAt DateTime @default(now())
@@ -279,9 +279,9 @@ model ActionAttempt {
   id             String   @id @default(uuid())
   sessionId      String
   actionItemId   String
-  status         String   // completed | failed | skipped
+  status         String // completed | failed | skipped
   reason         String?
-  reasonCategory String?  // cannot_find_page | login_failed | not_my_account | do_later | other
+  reasonCategory String? // cannot_find_page | login_failed | not_my_account | do_later | other
   createdAt      DateTime @default(now())
 
   session    ActionSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
@@ -294,7 +294,7 @@ model SecurityChat {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  user     User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user     User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
   messages SecurityChatMessage[]
   sessions SecurityChatSession[]
 }
@@ -304,7 +304,7 @@ model SecurityChatSession {
   chatId    String
   startedAt DateTime @default(now())
 
-  chat SecurityChat @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  chat     SecurityChat          @relation(fields: [chatId], references: [id], onDelete: Cascade)
   messages SecurityChatMessage[]
 
   @@index([chatId, startedAt])
@@ -314,8 +314,8 @@ model SecurityChatMessage {
   id        String   @id @default(uuid())
   chatId    String
   sessionId String?
-  role      String   // user | assistant
-  type      String   // text | action_list | official_link | card_news | tip | exit_cta
+  role      String // user | assistant
+  type      String // text | action_list | official_link | card_news | tip | exit_cta
   content   String
   metadata  Json?
   createdAt DateTime @default(now())
@@ -343,6 +343,11 @@ model Waitlist {
   token          String?   @unique
   tokenCreatedAt DateTime?
   createdAt      DateTime  @default(now())
+
+  // 사전등록 필수 동의 — 개인정보 동의 증빙용으로 시점까지 보존한다
+  ageOver14Agreed Boolean   @default(false)
+  privacyAgreed   Boolean   @default(false)
+  agreedAt        DateTime?
 }
 
 // IDly-apps-in-toss 서비스에서 사용하는 테이블 — 직접 수정 금지
