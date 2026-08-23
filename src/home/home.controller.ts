@@ -37,7 +37,12 @@ export class HomeController {
 - \`riskSummary\`: 가장 긴급한 위험 요약 또는 안전 메시지
 - \`serviceAccounts[]\`: 홈 카드 목록. 각 카드에 \`sourceMailAccount\`와 서비스 로고용 \`iconUrl\`/\`iconLabel\` 포함
 - \`cardNews[]\`: 카드뉴스 배열 — **우선순위 순으로 정렬되어 내려옵니다. 프론트는 배열 전체를 순서대로 표시하거나, 상위 N개만 표시하면 됩니다.** 현재는 고정 3개, 추후 사용자 계정 상태 기반 개인화 예정.
-- \`immediateActions[]\`: 하단 시트 즉시 할 일 목록 (현재 목 데이터, 추후 실제 ActionItem 연동 예정)`,
+- \`immediateActions[]\`: 하단 시트 '즉시 할 일' 목록. **실제 ActionItem 데이터입니다.**
+  - 대상: \`status=action_required\` 계정의 필수 조치(\`isRequired=true\`) 중 아직 끝나지 않은 것(\`pending\`/\`failed\`)
+  - 정렬: 계정 위험도 높은 순 → 계정 내 \`order\` 순. 배열 순서대로 표시하면 '가장 위험한 것부터'가 됩니다.
+  - \`title\`은 \`"{서비스명} {조치명}"\` 형태로 이미 조립돼 있습니다 (예: \`"Disney+ 비밀번호 즉시 변경"\`).
+  - \`serviceAccountId\`로 계정 상세(2-3)나 조치 채팅으로 이동하면 됩니다.
+  - 조치할 게 없으면 빈 배열입니다.`,
   })
   @ApiQuery({
     name: 'mailAccountId',
