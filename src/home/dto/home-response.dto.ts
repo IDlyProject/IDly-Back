@@ -120,6 +120,36 @@ class CardNewsDto {
   url: string;
 }
 
+class HomeImmediateActionDto {
+  @ApiProperty({ example: 'action-item-id-1', description: 'ActionItem ID' })
+  id: string;
+
+  @ApiProperty({
+    example: 'service-account-id-1',
+    description: '이 조치가 속한 서비스 계정 ID — 계정 상세·조치 채팅 이동에 사용',
+  })
+  serviceAccountId: string;
+
+  @ApiProperty({
+    enum: ['high', 'medium'],
+    example: 'high',
+    description: '계정 위험도에서 파생. 시트의 점 색상에 사용',
+  })
+  severity: 'high' | 'medium';
+
+  @ApiProperty({
+    example: 'Disney+ 비밀번호 즉시 변경',
+    description: '"{서비스명} {조치명}" 형태로 조립되어 내려옵니다',
+  })
+  title: string;
+
+  @ApiProperty({
+    example: '유출된 비밀번호로 계정이 위험합니다',
+    nullable: true,
+  })
+  description: string | null;
+}
+
 export class HomeResponseDto {
   @ApiPropertyOptional({ example: 'analysis-run-id-1', nullable: true })
   analysisId: string | null;
@@ -150,4 +180,12 @@ export class HomeResponseDto {
 
   @ApiProperty({ type: [CardNewsDto] })
   cardNews: CardNewsDto[];
+
+  @ApiProperty({
+    type: [HomeImmediateActionDto],
+    description:
+      "하단 '즉시 할 일' 시트 목록. 조치 필요 계정의 미완료 필수 조치를 " +
+      '위험도 높은 순으로 내려줍니다. 조치할 게 없으면 빈 배열.',
+  })
+  immediateActions: HomeImmediateActionDto[];
 }
