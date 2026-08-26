@@ -13,14 +13,42 @@ jobs:
       - name: Trigger deploy
         id: trigger
         run: |
-          RESPONSE=$(curl -sf -X POST \
-            "https://api.render.com/v1/services/${{ secrets.RENDER_SERVICE_ID }}/deploys" \
-            -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
-            -H "Content-Type: application/json" \
-            -d '{}')
-          DEPLOY_ID=$(echo "$RESPONSE" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
-          echo "deploy_id=$DEPLOY_ID" >> "$GITHUB_OUTPUT"
-          echo "Triggered deploy: $DEPLOY_ID"
+          # -sf 는 실패 시 본문을 버려서 원인이 안 보인다. 상태 코드와 본문을
+          # 함께 받아 로그에 남긴다. 키 만료(401)와 서비스 오류(5xx)를 구분해야
+          # 무엇을 고쳐야 할지 알 수 있다.
+          for attempt in 1 2 3; do
+            RESPONSE=$(curl -sS -X POST \
+              "https://api.render.com/v1/services/${{ secrets.RENDER_SERVICE_ID }}/deploys" \
+              -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
+              -H "Content-Type: application/json" \
+              -d '{}' \
+              -w $'\n%{http_code}')
+
+            HTTP_STATUS=$(printf '%s' "$RESPONSE" | tail -n1)
+            BODY=$(printf '%s' "$RESPONSE" | sed '$d')
+            DEPLOY_ID=$(printf '%s' "$BODY" | python3 -c 'import sys,json; raw=sys.stdin.read().strip(); d=json.loads(raw) if raw.startswith("{") else {}; print(d.get("id","") if isinstance(d,dict) else "")' 2>/dev/null || true)
+
+            if [ -n "$DEPLOY_ID" ]; then
+              echo "deploy_id=$DEPLOY_ID" >> "$GITHUB_OUTPUT"
+              echo "Triggered deploy: $DEPLOY_ID"
+              exit 0
+            fi
+
+            echo "Attempt $attempt failed (HTTP $HTTP_STATUS): $BODY"
+
+            # 401·403 은 재시도해도 그대로다. 키를 갱신해야 하므로 즉시 끝낸다.
+            case "$HTTP_STATUS" in
+              401|403)
+                echo "::error::Render API 인증 실패 (HTTP $HTTP_STATUS). RENDER_API_KEY 를 확인하세요. 대시보드에서 발급한 API 키여야 하며, render CLI 세션 토큰은 며칠 만에 만료됩니다."
+                exit 1
+                ;;
+            esac
+
+            if [ "$attempt" -lt 3 ]; then sleep 5; fi
+          done
+
+          echo "::error::Render 배포 트리거에 3회 모두 실패했습니다."
+          exit 1
 
       - name: Wait for deploy to go live
         run: |
