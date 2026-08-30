@@ -507,27 +507,69 @@ export class AnalysisService implements OnModuleInit {
     const configuredTimeout = Number(
       this.config.get<string>('AI_ANALYSIS_TIMEOUT_MS'),
     );
-    const timeout =
+    const pollDeadlineMs =
       Number.isFinite(configuredTimeout) && configuredTimeout > 0
         ? configuredTimeout
         : DEFAULT_AI_ANALYSIS_TIMEOUT_MS;
+
+    // Step 1: 업로드 → job_id 수신 (202 Accepted)
+    const UPLOAD_TIMEOUT_MS = 2 * 60 * 1000;
     const form = new FormData();
     form.append('file', createReadStream(tmpPath), {
       filename: 'analysis.mbox',
       contentType: 'application/mbox',
     });
 
-    const { data } = await withRetry(() =>
+    const { data: jobData } = await withRetry(() =>
       firstValueFrom(
         this.httpService.post(`${aiUrl}/analyze`, form, {
           headers: form.getHeaders(),
-          timeout,
+          timeout: UPLOAD_TIMEOUT_MS,
         }),
       ),
     );
 
-    // 내부 스키마 검증 — 실패 시 throw → 기존 run failed 경로 (클라이언트 status 필드 동일)
-    return parseAiAnalyzeResponse(data);
+    const jobId: string = jobData?.job_id;
+    if (!jobId) {
+      throw new Error('AI server did not return a job_id');
+    }
+    this.logger.log(`AI job created: ${jobId}`);
+
+    // Step 2: GET /analyze/{job_id} 폴링 — succeeded/failed 될 때까지
+    const POLL_INTERVAL_MS = 5_000;
+    const deadline = Date.now() + pollDeadlineMs;
+
+    while (Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+
+      const { data: statusData } = await withRetry(() =>
+        firstValueFrom(
+          this.httpService.get(`${aiUrl}/analyze/${jobId}`, {
+            timeout: 30_000,
+          }),
+        ),
+      );
+
+      const status: string = statusData?.status;
+      this.logger.log(
+        `AI job ${jobId}: status=${status} progress=${statusData?.progress ?? 0}%`,
+      );
+
+      if (status === 'succeeded') {
+        return parseAiAnalyzeResponse(statusData);
+      }
+
+      if (status === 'failed') {
+        throw new Error(
+          `AI job failed: ${statusData?.error ?? 'unknown error'}`,
+        );
+      }
+      // queued / running → 계속 폴링
+    }
+
+    throw new Error(
+      `AI job ${jobId} timed out after ${Math.round(pollDeadlineMs / 1000)}s`,
+    );
   }
 
   private async saveResults(
