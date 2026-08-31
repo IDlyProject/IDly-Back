@@ -1,10 +1,12 @@
-import { Body, Controller, Delete, Get, HttpCode, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Post, Req, UseGuards } from '@nestjs/common';
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { RateLimit } from '../common/guards/rate-limit.decorator';
 import { RateLimitGuard } from '../common/guards/rate-limit.guard';
+import { JwtGuard, AuthUser } from '../auth/jwt.guard';
 import { SubscribePushDto } from './dto/subscribe-push.dto';
 import { PushService } from './push.service';
 import { WebPushService } from './web-push.service';
+import type { Request } from 'express';
 
 @ApiTags('웹 푸시')
 @Controller('push')
@@ -118,6 +120,24 @@ self.addEventListener('notificationclick', (event) => {
   @ApiResponse({ status: 404, description: '이름·전화번호가 일치하는 사전등록 건 없음' })
   subscribe(@Body() dto: SubscribePushDto) {
     return this.pushService.subscribe(dto);
+  }
+
+  @Post('link-user')
+  @HttpCode(200)
+  @UseGuards(JwtGuard)
+  @RateLimit({ limit: 20, windowMs: 60 * 60 * 1000, key: 'ip' })
+  @ApiOperation({
+    summary: '로그인 후 구독을 유저에 연결',
+    description: '로그인 성공 직후 기기의 pushManager.getSubscription() endpoint를 전달하면 해당 구독의 userId를 갱신합니다. 분석 완료 푸시 등 로그인 이후 알림에 필요합니다.',
+  })
+  @ApiResponse({ status: 200, schema: { example: { status: 'linked' } } })
+  async linkUser(
+    @Body('endpoint') endpoint: string,
+    @Req() req: Request,
+  ): Promise<{ status: string }> {
+    const userId = (req['user'] as AuthUser).sub;
+    await this.pushService.linkToUser(endpoint ?? '', userId);
+    return { status: 'linked' };
   }
 
   @Delete('subscribe')
