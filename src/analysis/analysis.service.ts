@@ -24,6 +24,7 @@ import {
   nextAnalysisAccountStatus,
 } from '../common/domain/status';
 import { SolarService } from '../common/solar/solar.service';
+import { PushService } from '../push/push.service';
 import {
   computeSecurityScore,
   isActiveForHomeMetrics,
@@ -70,6 +71,7 @@ export class AnalysisService implements OnModuleInit {
     private readonly httpService: HttpService,
     private readonly config: ConfigService,
     private readonly solarService: SolarService,
+    private readonly pushService: PushService,
   ) {}
 
   async onModuleInit() {
@@ -366,10 +368,13 @@ export class AnalysisService implements OnModuleInit {
         STEP_MESSAGES['completed'],
       );
 
-      // Solar snapshot은 비동기로 patch — 분석 완료 UX를 블로킹하지 않음
+      // Solar snapshot, 분석 완료 푸시 — 둘 다 비동기로 처리해 UX를 블로킹하지 않음
       setImmediate(() => {
         this.buildAndPatchSnapshot(runId, userId).catch((e) =>
           this.logger.error(`[runId=${runId}] Solar snapshot 생성 실패: ${e}`),
+        );
+        this.pushService.notifyAnalysisComplete(userId).catch((e) =>
+          this.logger.error(`[runId=${runId}] 분석 완료 푸시 발송 실패: ${e}`),
         );
       });
     } catch (e) {

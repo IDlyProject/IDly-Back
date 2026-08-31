@@ -7,9 +7,10 @@ import { GmailModule } from '../gmail/gmail.module';
 import { JwtAuthModule } from '../auth/jwt.module';
 import { SolarModule } from '../common/solar/solar.module';
 import { RateLimitGuard } from '../common/guards/rate-limit.guard';
+import { PushModule } from '../push/push.module';
 
 @Module({
-  imports: [HttpModule, GmailModule, JwtAuthModule, SolarModule],
+  imports: [HttpModule, GmailModule, JwtAuthModule, SolarModule, PushModule],
   providers: [AnalysisService, AnalysisSchedulerService, RateLimitGuard],
   controllers: [AnalysisController],
   exports: [AnalysisService],

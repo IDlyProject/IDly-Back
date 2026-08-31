@@ -77,6 +77,22 @@ export class PushService {
     });
   }
 
+  /** 분석 완료 알림. 해당 유저의 모든 구독에 발송한다. */
+  async notifyAnalysisComplete(userId: string): Promise<void> {
+    const subscriptions = await this.prisma.pushSubscription.findMany({
+      where: { userId },
+      select: { id: true, endpoint: true, p256dh: true, auth: true },
+    });
+
+    if (subscriptions.length === 0) return;
+
+    await this.webPush.sendToSubscriptions(subscriptions, {
+      title: '분석이 완료됐어요',
+      body: '내 계정 보안 상태를 지금 바로 확인해보세요.',
+      path: '/',
+    });
+  }
+
   /** 로그인 이후 같은 기기의 구독을 유저에 이어 붙인다 — 재구독을 요구하지 않기 위함. */
   async linkToUser(endpoint: string, userId: string): Promise<void> {
     const updated = await this.prisma.pushSubscription.updateMany({
