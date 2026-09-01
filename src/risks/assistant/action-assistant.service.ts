@@ -14,6 +14,7 @@ import {
   planKbActionMerge,
   stepTypeToEmoji,
 } from '../policy/action-kb';
+import { resolveCardNews } from '../../common/content/card-news-registry';
 import { assertNoSensitiveData } from '../../common/sanitize/secret-detector';
 import {
   redactForLlmContext,
@@ -489,9 +490,9 @@ export class ActionAssistantService {
 
           // 카드뉴스는 개별 조치 도중 끼워 넣지 않고, 모든 필수 조치를
           // 완료한 뒤 계정에 맞는 콘텐츠를 한 번만 노출한다.
-          const completionCardNews = updatedItems
-            .map((actionItem) => matchKbEntry(sa.primaryRiskType, actionItem)?.cardNews)
-            .find((cardNews) => cardNews != null);
+          // riskType을 1순위, 완료된 첫 번째 stepType을 2순위로 동적 픽.
+          const firstStepType = updatedItems[0]?.type ?? null;
+          const completionCardNews = resolveCardNews(firstStepType, sa.primaryRiskType);
           if (completionCardNews) {
             assistantMsgs.push({
               role: 'assistant',
