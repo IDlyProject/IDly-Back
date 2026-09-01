@@ -77,8 +77,17 @@ export class PushService {
     });
   }
 
-  /** 분석 완료 알림. 해당 유저의 모든 구독에 발송한다. */
+  /** 분석 완료 알림. 보안 위험 계정이 있을 때만 발송한다. */
   async notifyAnalysisComplete(userId: string): Promise<void> {
+    const riskCount = await this.prisma.serviceAccount.count({
+      where: {
+        gmailAccount: { userId },
+        status: 'action_required',
+      },
+    });
+
+    if (riskCount === 0) return;
+
     const subscriptions = await this.prisma.pushSubscription.findMany({
       where: { userId },
       select: { id: true, endpoint: true, p256dh: true, auth: true },
@@ -87,8 +96,8 @@ export class PushService {
     if (subscriptions.length === 0) return;
 
     await this.webPush.sendToSubscriptions(subscriptions, {
-      title: '분석이 완료됐어요',
-      body: '내 계정 보안 상태를 지금 바로 확인해보세요.',
+      title: '보안 조치가 필요한 계정이 있어요',
+      body: `${riskCount}개 계정을 확인해보세요.`,
       path: '/',
     });
   }
