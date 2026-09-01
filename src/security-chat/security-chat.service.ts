@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, TooManyRequestsException } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
 import { Prisma } from '@prisma/client';
@@ -106,11 +106,15 @@ function findBestActionForMessage<
 
 // ─── Service ──────────────────────────────────────────────────────────────────
 
+const SOLAR_RATE_LIMIT_PER_HOUR = 20;
+
 @Injectable()
 export class SecurityChatService {
   private readonly logger = new Logger(SecurityChatService.name);
   private readonly SOLAR_URL = 'https://api.upstage.ai/v1/chat/completions';
   private readonly HISTORY_LIMIT = 10;
+  // 유저별 Solar 요청 카운터: userId → { count, windowStart }
+  private readonly solarRateMap = new Map<string, { count: number; windowStart: number }>();
 
   constructor(
     private readonly prisma: PrismaService,
@@ -248,6 +252,7 @@ export class SecurityChatService {
       .map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content }));
 
     assertNoSensitiveData(message);
+    this.checkSolarRateLimit(userId);
 
     // 유저 메시지 저장
     const userMsg = await this.prisma.securityChatMessage.create({
@@ -693,6 +698,20 @@ showExitCta: 대화를 마무리하거나 다른 페이지로 안내할 때 true
       chatId,
       messages: messages.map(buildMsgDto),
     };
+  }
+
+  private checkSolarRateLimit(userId: string): void {
+    const now = Date.now();
+    const windowMs = 60 * 60 * 1000;
+    const entry = this.solarRateMap.get(userId);
+    if (!entry || now - entry.windowStart > windowMs) {
+      this.solarRateMap.set(userId, { count: 1, windowStart: now });
+      return;
+    }
+    if (entry.count >= SOLAR_RATE_LIMIT_PER_HOUR) {
+      throw new TooManyRequestsException('보안 도우미는 1시간에 최대 20회 이용할 수 있어요. 잠시 후 다시 시도해주세요.');
+    }
+    entry.count += 1;
   }
 }
 

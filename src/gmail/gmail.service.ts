@@ -156,7 +156,7 @@ export class GmailService {
       let count = 0;
       let sizeBytes = 0;
       let lastEmailDate: Date | null = null;
-      const BATCH = this.intConfig('GMAIL_FETCH_BATCH_SIZE', 1);
+      const BATCH = this.intConfig('GMAIL_FETCH_BATCH_SIZE', 10);
       const MAX_RAW_BYTES = this.intConfig(
         'GMAIL_MAX_RAW_MESSAGE_BYTES',
         5_000_000,
