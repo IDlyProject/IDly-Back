@@ -169,6 +169,7 @@ model AnalysisRun {
 
   @@index([userId, status])
   @@index([userId, startedAt])
+  @@index([userId, completedAt])
 }
 
 model ServiceAccount {

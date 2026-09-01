@@ -12,33 +12,38 @@ export class HomeService {
   constructor(private readonly prisma: PrismaService) {}
 
   async getHome(userId: string, mailAccountId: string = 'all') {
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-      select: { name: true },
-    });
-
-    const gmailAccounts = await this.prisma.gmailAccount.findMany({
-      where: {
-        userId,
-        ...(mailAccountId !== 'all' ? { id: mailAccountId } : {}),
-      },
-      include: {
-        serviceAccounts: {
-          include: {
-            _count: { select: { riskEvidences: true } },
-            actionItems: {
-              where: { isRequired: true, status: { in: ['pending', 'failed'] } },
-              orderBy: { order: 'asc' },
+    // 상호 독립 쿼리 4개를 병렬 실행 — 직렬 3왕복 → 1왕복
+    const [user, gmailAccounts, latestRun, lastRun] = await Promise.all([
+      this.prisma.user.findUnique({
+        where: { id: userId },
+        select: { name: true },
+      }),
+      this.prisma.gmailAccount.findMany({
+        where: {
+          userId,
+          ...(mailAccountId !== 'all' ? { id: mailAccountId } : {}),
+        },
+        include: {
+          serviceAccounts: {
+            include: {
+              _count: { select: { riskEvidences: true } },
+              actionItems: {
+                where: { isRequired: true, status: { in: ['pending', 'failed'] } },
+                orderBy: { order: 'asc' },
+              },
             },
           },
         },
-      },
-    });
-
-    const latestRun = await this.prisma.analysisRun.findFirst({
-      where: { userId },
-      orderBy: { startedAt: 'desc' },
-    });
+      }),
+      this.prisma.analysisRun.findFirst({
+        where: { userId },
+        orderBy: { startedAt: 'desc' },
+      }),
+      this.prisma.analysisRun.findFirst({
+        where: { userId, status: 'completed' },
+        orderBy: { completedAt: 'desc' },
+      }),
+    ]);
 
     const backgroundAnalysis =
       latestRun?.status === 'queued' || latestRun?.status === 'scanning'
@@ -46,11 +51,6 @@ export class HomeService {
         : latestRun?.status === 'failed'
           ? { status: 'failed' as const, analysisId: latestRun.id }
           : { status: 'idle' as const, analysisId: null };
-
-    const lastRun = await this.prisma.analysisRun.findFirst({
-      where: { userId, status: 'completed' },
-      orderBy: { completedAt: 'desc' },
-    });
 
     const allServiceAccounts = gmailAccounts
       .flatMap((ga) =>
