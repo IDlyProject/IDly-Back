@@ -19,7 +19,7 @@ export class GmailSyncSchedulerService {
     private readonly watches: GmailWatchService,
   ) {}
 
-  @Interval(10_000)
+  @Interval(30_000)
   async dispatchPendingInbox(): Promise<void> {
     if (!this.enabled()) return;
     const events = await this.prisma.gmailPushEvent.findMany({

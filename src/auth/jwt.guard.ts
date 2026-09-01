@@ -16,8 +16,14 @@ export type AuthUser = {
   jti?: string;
 };
 
+const USER_CACHE_TTL_MS = 60_000;
+const USER_CACHE_MAX = 1000;
+
 @Injectable()
 export class JwtGuard implements CanActivate {
+  // userId → 캐시 만료시각. 팬텀 JWT 차단을 위한 DB 조회를 TTL 이내 재요청에서 생략한다.
+  private readonly userCache = new Map<string, number>();
+
   constructor(
     private readonly jwtService: JwtService,
     private readonly config: ConfigService,
@@ -53,17 +59,40 @@ export class JwtGuard implements CanActivate {
       throw new UnauthorizedException('유효하지 않은 토큰입니다.');
     }
 
-    // 팬텀 JWT 차단 — DB에 존재하는 유저만 허용
-    const user = await this.prisma.user.findUnique({
-      where: { id: payload.sub },
-      select: { id: true },
-    });
-    if (!user) {
-      throw new UnauthorizedException('유효하지 않은 세션입니다. 다시 로그인해 주세요.');
+    // 팬텀 JWT 차단 — DB에 존재하는 유저만 허용 (TTL 캐시로 중복 쿼리 최소화)
+    if (!this.isUserCached(payload.sub)) {
+      const user = await this.prisma.user.findUnique({
+        where: { id: payload.sub },
+        select: { id: true },
+      });
+      if (!user) {
+        throw new UnauthorizedException('유효하지 않은 세션입니다. 다시 로그인해 주세요.');
+      }
+      this.cacheUser(payload.sub);
     }
 
     req['user'] = payload;
     return true;
+  }
+
+  private isUserCached(userId: string): boolean {
+    const expiresAt = this.userCache.get(userId);
+    if (!expiresAt) return false;
+    if (Date.now() > expiresAt) {
+      this.userCache.delete(userId);
+      return false;
+    }
+    return true;
+  }
+
+  private cacheUser(userId: string): void {
+    if (this.userCache.size >= USER_CACHE_MAX) {
+      const now = Date.now();
+      for (const [key, exp] of this.userCache) {
+        if (now > exp) this.userCache.delete(key);
+      }
+    }
+    this.userCache.set(userId, Date.now() + USER_CACHE_TTL_MS);
   }
 
   private isUnsafeMethod(method: string): boolean {
