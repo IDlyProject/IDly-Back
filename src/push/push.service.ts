@@ -102,6 +102,27 @@ export class PushService {
     });
   }
 
+  /** 주간 알림. notificationAgreed 유저의 모든 구독에 발송한다. */
+  async notifyWeeklyCheck(): Promise<{ sent: number }> {
+    const subscriptions = await this.prisma.pushSubscription.findMany({
+      where: {
+        userId: { not: null },
+        user: { notificationAgreed: true },
+      },
+      select: { id: true, endpoint: true, p256dh: true, auth: true },
+    });
+
+    if (subscriptions.length === 0) return { sent: 0 };
+
+    const result = await this.webPush.sendToSubscriptions(subscriptions, {
+      title: '한 주가 시작됐어요',
+      body: '이번 주 계정 보안 상태를 확인해보세요.',
+      path: '/',
+    });
+
+    return { sent: result.sent };
+  }
+
   /** 로그인 이후 같은 기기의 구독을 유저에 이어 붙인다 — 재구독을 요구하지 않기 위함. */
   async linkToUser(endpoint: string, userId: string): Promise<void> {
     const updated = await this.prisma.pushSubscription.updateMany({

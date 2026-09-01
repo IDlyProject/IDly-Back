@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
 import { AnalysisService } from './analysis.service';
+import { PushService } from '../push/push.service';
 
 const REANALYSIS_INTERVAL_DAYS = 7;
 const BATCH_SIZE = 20;
@@ -14,6 +15,7 @@ export class AnalysisSchedulerService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly analysisService: AnalysisService,
+    private readonly pushService: PushService,
   ) {}
 
   /** 매일 새벽 3시 (KST) 실행 — 7일 이상 미분석 유저 순차 재분석 */
@@ -61,6 +63,18 @@ export class AnalysisSchedulerService {
     }
 
     this.logger.log('[periodic] 7-day reanalysis scan completed');
+  }
+
+  /** 매주 월요일 오전 9시 (KST) — 웹 푸시 구독 유저 전체에 주간 알림 발송 */
+  @Cron('0 0 9 * * 1', { timeZone: 'Asia/Seoul' })
+  async sendWeeklyCheckNotification(): Promise<void> {
+    this.logger.log('[weekly] 주간 알림 발송 시작');
+    try {
+      const { sent } = await this.pushService.notifyWeeklyCheck();
+      this.logger.log(`[weekly] 발송 완료: ${sent}건`);
+    } catch (e) {
+      this.logger.error(`[weekly] 발송 실패: ${e instanceof Error ? e.message : e}`);
+    }
   }
 }
 
