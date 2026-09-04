@@ -208,11 +208,12 @@ window.location.href = data.url;
 
       this.setAuthCookies(res, accessToken, refreshToken);
 
-      // 모바일 브라우저(iOS Safari 등)는 cross-origin redirect 중 SameSite=None 쿠키를
-      // third-party로 간주해 차단. URL 파라미터로도 토큰 전달해 쿠키 없이도 동작하도록 함.
-      // 프론트: URL에 at/rt 있으면 sessionStorage/localStorage에 저장 후 replaceState로 URL 정리.
+      // iOS Safari 등 cross-origin redirect에서 SameSite=None 쿠키가 차단될 수 있다.
+      // 토큰 원문 대신 1분 수명의 one-time code를 URL에 포함하고,
+      // 프론트가 POST /auth/exchange로 교환하게 해 URL에 실제 자격증명이 노출되지 않도록 한다.
+      const otc = this.authService.issueOneTimeCode(accessToken, refreshToken, mode);
       res.redirect(
-        `${frontendUrl}/auth/callback?mode=${mode}&at=${encodeURIComponent(accessToken)}&rt=${encodeURIComponent(refreshToken)}`,
+        `${frontendUrl}/auth/callback?mode=${mode}&code=${encodeURIComponent(otc)}`,
       );
     } catch (error) {
       const response = (error as any)?.getResponse?.();
@@ -237,6 +238,26 @@ window.location.href = data.url;
     }
   }
 
+  @Post('exchange')
+  @HttpCode(200)
+  @RateLimit({ limit: 20, windowMs: 60_000, key: 'ip' })
+  @ApiOperation({
+    summary: 'OAuth one-time code → 토큰 교환',
+    description: 'OAuth 콜백 리다이렉트의 `code` 파라미터(1분 수명 JWT)를 실제 access/refresh 토큰으로 교환한다. 쿠키도 함께 설정된다.',
+  })
+  @ApiResponse({ status: 200, description: '교환 성공' })
+  @ApiResponse({ status: 401, description: '코드 만료 또는 무효' })
+  async exchangeCode(
+    @Body('code') code: string,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    if (!code) throw new UnauthorizedException('code가 없습니다.');
+    const { accessToken, refreshToken, mode } =
+      this.authService.exchangeOneTimeCode(code);
+    this.setAuthCookies(res, accessToken, refreshToken);
+    return { accessToken, refreshToken, mode, expiresIn: this.config.get('JWT_EXPIRES_IN', '1h') };
+  }
+
   @Post('refresh')
   @HttpCode(200)
   @RateLimit({ limit: 30, windowMs: 60_000, key: 'ip' })
@@ -245,7 +266,7 @@ window.location.href = data.url;
     description: `\`idly_refresh\` 쿠키 또는 바디의 \`refreshToken\`으로 새 access/refresh 발급. 이전 refresh는 즉시 폐기.
 
 **모바일 사용법 (쿠키 없는 환경)**
-1. \`GET /auth/google\` 콜백 리다이렉트 URL의 \`rt\` 파라미터를 localStorage에 저장
+1. \`POST /auth/exchange\` 로 one-time code를 토큰으로 교환 후 \`refreshToken\` 저장
 2. 만료 시 \`POST /auth/refresh\` body에 \`{ "refreshToken": "<rt값>" }\` 전송
 3. 응답의 \`accessToken\`, \`refreshToken\`으로 기존 값 갱신 (로테이션)`,
   })

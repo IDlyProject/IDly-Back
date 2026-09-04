@@ -10,6 +10,13 @@ import { UsersService } from '../users/users.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { hashOpaqueToken } from '../common/crypto/opaque-token';
 
+export interface OneTimeCodePayload {
+  accessToken: string;
+  refreshToken: string;
+  mode: string;
+  purpose: 'auth_callback';
+}
+
 @Injectable()
 export class AuthService {
   private readonly oauth2Client;
@@ -233,6 +240,35 @@ export class AuthService {
       where: { userId, revokedAt: null },
       data: { revokedAt: new Date() },
     });
+  }
+
+  /**
+   * OAuth 콜백 후 URL에 직접 토큰을 노출하지 않기 위한 단기(1분) 임시 코드 발급.
+   * 프론트가 이 코드로 POST /auth/exchange를 호출해 실제 토큰을 수령한다.
+   */
+  issueOneTimeCode(accessToken: string, refreshToken: string, mode: string): string {
+    const payload: OneTimeCodePayload = {
+      accessToken,
+      refreshToken,
+      mode,
+      purpose: 'auth_callback',
+    };
+    return this.jwtService.sign(payload, { expiresIn: '1m' });
+  }
+
+  /**
+   * one-time code 검증 후 토큰 반환. 코드는 1분 후 자동 만료된다.
+   */
+  exchangeOneTimeCode(code: string): OneTimeCodePayload {
+    try {
+      const payload = this.jwtService.verify<OneTimeCodePayload>(code);
+      if (payload.purpose !== 'auth_callback') {
+        throw new UnauthorizedException('유효하지 않은 코드입니다.');
+      }
+      return payload;
+    } catch {
+      throw new UnauthorizedException('코드가 만료됐거나 유효하지 않습니다.');
+    }
   }
 
   private hashToken(raw: string): string {
