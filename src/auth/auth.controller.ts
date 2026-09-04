@@ -107,14 +107,13 @@ export class AuthController {
 - **\`idly_token\` 쿠키 포함 후 호출** → 기존 유저에 서브 계정 추가 (\`isPrimary: false\`)
 
 **Google 인증 완료 후:**
-- access JWT → \`idly_token\` 쿠키 (단기) + 리다이렉트 URL의 \`at\` 파라미터
-- refresh → \`idly_refresh\` 쿠키 (장기) + 리다이렉트 URL의 \`rt\` 파라미터
-- \`{FRONTEND_URL}/auth/callback?mode={login|add}&at={accessToken}&rt={refreshToken}\` 로 리다이렉트
+- \`idly_token\` 쿠키(단기) + \`idly_refresh\` 쿠키(장기) 설정
+- \`{FRONTEND_URL}/auth/callback?mode={login|add}&code={oneTimeCode}\` 로 리다이렉트
+- \`code\`는 1분 수명의 JWT — 프론트가 \`POST /auth/exchange\`로 교환해 실제 토큰 수령
 
 **모바일 대응 (iOS Safari 등 SameSite=None 쿠키 차단 환경)**
-- URL 파라미터 \`at\`, \`rt\`를 sessionStorage/localStorage에 저장 후 \`history.replaceState\`로 URL 정리
-- 이후 API 요청 시 \`Authorization: Bearer {at}\` 헤더로 전송
-- 토큰 만료 시 \`POST /auth/refresh\` body에 \`{ refreshToken: rt }\`로 갱신
+- 쿠키가 차단돼도 \`POST /auth/exchange\` 응답의 \`accessToken\`/\`refreshToken\`으로 동작
+- 토큰 만료 시 \`POST /auth/refresh\` body에 \`{ refreshToken: "<rt값>" }\`로 갱신
 
 **\`error=refresh_token_missing\` 처리**
 콜백에서 이 에러를 받으면 Google이 refresh_token을 재발급하지 않은 것. \`GET /auth/google?reauth=true\`로 재시도하면 Google이 consent 화면을 강제로 띄워 refresh_token을 재발급합니다.
