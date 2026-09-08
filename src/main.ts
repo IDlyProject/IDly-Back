@@ -12,6 +12,15 @@ async function bootstrap() {
     bodyParser: false,
   });
 
+  // TRACE 메서드 차단 (Proxy Disclosure CWE-204 대응)
+  app.use((req: any, res: any, next: any) => {
+    if (req.method === 'TRACE') {
+      res.status(405).end();
+      return;
+    }
+    next();
+  });
+
   // Render/프록시 뒤에서 실제 클라이언트 IP를 rate-limit에 사용
   app.set('trust proxy', 1);
 
