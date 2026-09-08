@@ -13,6 +13,7 @@ import {
   noOfficialLinkGuidance,
   planKbActionMerge,
   stepTypeToEmoji,
+  getKbSteps,
 } from '../policy/action-kb';
 import { resolveCardNews } from '../../common/content/card-news-registry';
 import { assertNoSensitiveData } from '../../common/sanitize/secret-detector';
@@ -628,10 +629,52 @@ export class ActionAssistantService {
 
       sessionPatch = { composerEnabled: false, composerPlaceholder: null, feedbackEnabled: true, activeActionItemId: item.id };
 
+    } else if (body.type === 'user_text') {
+      if (!session.composerEnabled) throw new BadRequestException('메시지 입력이 활성화되지 않은 상태입니다.');
+      const userText = (body.message ?? '').slice(0, 500);
+      if (!userText) throw new BadRequestException('message 필수');
+      assertNoSensitiveData(userText);
+
+      const userMsg = await this.prisma.actionMessage.create({
+        data: { sessionId: session.id, role: 'user', type: 'text', content: userText },
+      });
+      userMessage = buildMessageDto(userMsg);
+
+      const activeItem = items.find((i) => i.id === session.activeActionItemId) ?? null;
+      const kbEntries = getKbSteps(sa.primaryRiskType);
+      const evidences = await this.prisma.riskEvidence.findMany({
+        where: { serviceAccountId },
+        select: { summary: true },
+        orderBy: { receivedAt: 'desc' },
+        take: 3,
+      });
+      const recentEvidence = evidences.map((e) => e.summary).filter(Boolean) as string[];
+
+      const { reply, showLink, showFeedback } = await this.callSolarChat(userText, {
+        displayName,
+        riskType: sa.primaryRiskType,
+        headline: sa.headline,
+        recentEvidence,
+        activeItem,
+        kbEntries,
+        officialUrl: registry?.officialUrl ?? null,
+      });
+
+      assistantMsgs.push({ role: 'assistant', type: 'text', content: reply });
+      if (showLink) {
+        const target = activeItem ?? items[0] ?? null;
+        const linkCard = target ? buildExternalCard(target, displayName, registry, 'official') : null;
+        if (linkCard) {
+          assistantMsgs.push({ role: 'assistant', type: 'official_link', content: linkCard.text, metadata: { officialLink: linkCard } });
+        }
+      }
+      if (showFeedback && activeItem) {
+        assistantMsgs.push({ role: 'assistant', type: 'feedback_actions', content: '조치를 시도해보셨나요?', metadata: { feedbackActions: { actionItemId: activeItem.id } } });
+        sessionPatch = { feedbackEnabled: true };
+      }
+
     } else {
-      // Phase 1: user_text 미지원 — composer는 failure_reason 전용
-      // dynamic.html handleSend()는 항상 실패 사유 플로우만 처리
-      throw new BadRequestException('user_text 타입은 지원되지 않습니다. failure_reason을 사용해주세요.');
+      throw new BadRequestException('지원하지 않는 메시지 타입입니다.');
     }
 
     // 완료 피드백은 조치/계정/세션/메시지를 하나의 트랜잭션에서 commit한다.

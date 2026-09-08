@@ -525,10 +525,15 @@ export class AnalysisService implements OnModuleInit {
       contentType: 'application/mbox',
     });
 
+    const internalSecret = this.config.get<string>('INTERNAL_SECRET');
+    const authHeaders = internalSecret
+      ? { 'X-Internal-Secret': internalSecret }
+      : {};
+
     const { data: jobData } = await withRetry(() =>
       firstValueFrom(
         this.httpService.post(`${aiUrl}/analyze`, form, {
-          headers: form.getHeaders(),
+          headers: { ...form.getHeaders(), ...authHeaders },
           timeout: UPLOAD_TIMEOUT_MS,
         }),
       ),
@@ -550,6 +555,7 @@ export class AnalysisService implements OnModuleInit {
       const { data: statusData } = await withRetry(() =>
         firstValueFrom(
           this.httpService.get(`${aiUrl}/analyze/${jobId}`, {
+            headers: authHeaders,
             timeout: 30_000,
           }),
         ),

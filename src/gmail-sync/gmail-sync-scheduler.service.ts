@@ -100,6 +100,18 @@ export class GmailSyncSchedulerService {
     }
   }
 
+  /** 매일 새벽 4시 — 90일 이상 된 GmailProcessedMessage 정리 (무제한 증가 방지) */
+  @Cron('0 0 4 * * *', { timeZone: 'Asia/Seoul' })
+  async purgeOldProcessedMessages(): Promise<void> {
+    const cutoff = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
+    const { count } = await this.prisma.gmailProcessedMessage.deleteMany({
+      where: { processedAt: { lt: cutoff } },
+    });
+    if (count > 0) {
+      this.logger.log(`[purge] GmailProcessedMessage ${count}건 삭제 (90일 초과)`);
+    }
+  }
+
   private enabled() {
     return this.config.get<string>('GMAIL_PUSH_ENABLED') === 'true';
   }

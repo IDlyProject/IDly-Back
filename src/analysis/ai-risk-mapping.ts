@@ -94,7 +94,6 @@ export function inferRiskType(ai: AiAccountAnalysisLike): RiskType {
     ...(ai.problem_mails ?? []).flatMap((m) => [
       m.subject,
       m.matched_keywords,
-      m.body,
     ]),
   ]
     .filter(Boolean)
