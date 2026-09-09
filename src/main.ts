@@ -71,7 +71,7 @@ async function bootstrap() {
     }),
   );
 
-  app.setGlobalPrefix('api');
+  app.setGlobalPrefix('api', { exclude: ['gmail/push'] });
 
   // production: 기본 비활성. 로컬/스테이징 또는 ENABLE_SWAGGER=true 일 때만 노출
   const enableSwagger =
